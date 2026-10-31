@@ -1,33 +1,21 @@
-/* USER CODE BEGIN Header */
-/**
- * @file   mpu6050.h
- * @brief  Minimal driver interface for MPU6050 IMU.
- */
-/* USER CODE END Header */
+/* Driver MPU6050: gyro ±500 dps, accel ±4 g, DLPF 42 Hz, lấy mẫu 1 kHz. */
+#ifndef MPU6050_H
+#define MPU6050_H
 
-#ifndef MPU6050_H_
-#define MPU6050_H_
-
+#include "main.h"
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Initialise the sensor and enable EXTI9_5. I2C2 and PB5 GPIO must be ready. */
-bool Mpu6050_Init(void);
+#define MPU6050_ADDR       0x68
+#define MPU_GYRO_LSB_DPS   65.5f   /* ±500 dps */
+#define MPU_ACC_LSB_G      8192.0f /* ±4 g */
 
-/* Read raw Z-axis gyro value; returns 0 if the I2C read fails. */
-int16_t Mpu6050_ReadGyroZ(void);
+typedef struct {
+  int16_t ax, ay, az, temp, gx, gy, gz;
+} mpu_raw_t;
 
-/* Read raw Z-axis gyro value and report I2C errors explicitly. */
-bool Mpu6050_TryReadGyroZ(int16_t *out_raw);
+/* Trả về WHO_AM_I (0x68 là hàng chuẩn; một số bản clone trả 0x70/0x72/0x98), 0 nếu không trả lời. */
+uint8_t mpu6050_init(I2C_HandleTypeDef *i2c);
+bool mpu6050_read(I2C_HandleTypeDef *i2c, mpu_raw_t *r);
 
-/* ISR hook – call from EXTI5_IRQHandler(). */
-void Mpu6050_DataReadyISR(void);
-
-/* Poll for new data – returns true when a fresh sample was read. */
-bool Mpu6050_Poll(int16_t *out_raw);
-
-/* Simple self‑test that prints readings on UART2. */
-void Mpu6050_SelfTest(void);
-
-#endif // MPU6050_H_
-
+#endif /* MPU6050_H */
