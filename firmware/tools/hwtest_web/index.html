@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Micromouse – Test phần cứng</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --ink: #1d2330; --muted: #6b7280; --line: #e3e6eb;
+    --accent: #2563eb; --ok: #16a34a; --warn: #d97706; --bad: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  header { position: sticky; top: 0; z-index: 5; display: flex; gap: 12px; align-items: center; padding: 10px 20px; background: var(--card); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 17px; margin: 0 auto 0 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); display: inline-block; margin-right: 6px; }
+  .dot.on { background: var(--ok); }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 16px; padding: 16px 20px 40px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  section h2 { margin: 0 0 4px; font-size: 16px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  select, input[type=number] { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; width: 90px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 13px; background: #fafafa; }
+  .chip.ok { border-color: #bbf7d0; background: #f0fdf4; color: #166534; }
+  .chip.bad { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+  .big { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .num { font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .box { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .box .lbl { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .bar { height: 10px; border-radius: 5px; background: #eef0f3; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+  .result { padding: 10px 12px; border-radius: 10px; background: #eff6ff; border: 1px solid #bfdbfe; margin-top: 8px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 84px); grid-template-rows: repeat(2, 64px); gap: 8px; justify-content: center; user-select: none; }
+  .pad button { font-size: 15px; font-weight: 600; touch-action: none; }
+  .pad button.held { background: var(--accent); color: #fff; border-color: var(--accent); }
+  canvas { width: 100%; display: block; }
+  details summary { cursor: pointer; color: var(--muted); }
+  #log { height: 140px; overflow: auto; font: 12px ui-monospace, Menlo, monospace; background: #0f172a; color: #cbd5e1; padding: 8px; border-radius: 8px; white-space: pre; }
+  #banner { margin: 16px 20px 0; padding: 12px 14px; border-radius: 10px; background: #fffbeb; border: 1px solid #fde68a; }
+  .steps { margin: 6px 0 0 18px; padding: 0; }
+  .steps li { margin: 3px 0; }
+  label.inline { display: inline-flex; gap: 6px; align-items: center; }
+  .wide { grid-column: 1 / -1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐭 Micromouse – Test phần cứng</h1>
+  <span><span id="dot" class="dot"></span><span id="status">Chưa kết nối</span></span>
+  <select id="baud"><option>115200</option><option>9600</option><option>38400</option><option>57600</option></select>
+  <button id="btnConn" class="primary">Kết nối</button>
+  <button id="btnStopAll" class="danger" title="Phím Space">■ DỪNG</button>
+</header>
+
+<div id="banner" hidden></div>
+
+<main>
+  <!-- ==================== ToF ==================== -->
+  <section>
+    <h2>① Cảm biến khoảng cách ToF (VL53L0X ×5)</h2>
+    <p class="hint">Bấm <b>Khởi động ToF</b>: xe bật lần lượt 5 cảm biến, gán địa chỉ 0x30–0x34 rồi đo liên tục. Đưa tay lại gần từng cảm biến, tia tương ứng sẽ ngắn lại.</p>
+    <div class="row">
+      <button id="btnTof" disabled>Khởi động ToF</button>
+      <button id="btnTofStop" disabled>Dừng đo</button>
+      <button id="btnScan" disabled>Quét I2C</button>
+      <label class="inline">Thang đo <select id="tofScale"><option value="300">300 mm</option><option value="500" selected>500 mm</option><option value="1000">1000 mm</option></select></label>
+    </div>
+    <div class="row" id="tofChips"></div>
+    <div class="row" id="scanOut" class="hint"></div>
+    <canvas id="tofCanvas" height="330"></canvas>
+    <div id="tofBars"></div>
+
+    <div class="box" style="margin-top:12px">
+      <b>Hiệu chuẩn từng cảm biến</b>
+      <ol class="steps">
+        <li>Kiểm tra mắt cảm biến đã <b>bóc miếng film bảo vệ</b> (lớp nhựa màu vàng/cam) và cảm biến được gắn thẳng.</li>
+        <li>Đặt một tấm bìa <b>phẳng, màu trắng/sáng</b> vuông góc với cảm biến, cách <b>mặt cảm biến</b> đúng D mm (đo bằng thước).</li>
+        <li>Chọn cảm biến, nhập D rồi bấm <b>Đo mốc 1</b> (lấy trung bình 2 s, giữ yên). Muốn chính xác hơn thì đo thêm mốc 2 ở khoảng cách khác, ví dụ 50 và 150 mm.</li>
+      </ol>
+      <div class="row">
+        <select id="calSensor" style="width:90px"></select>
+        D = <input type="number" id="calD" value="100" min="20" max="1000"> mm
+        <button id="btnCal1" disabled>Đo mốc 1</button>
+        <button id="btnCal2" disabled>Đo mốc 2</button>
+        <button id="btnCalClear" disabled>Xoá cảm biến này</button>
+      </div>
+      <div class="row"><label class="inline"><input type="checkbox" id="tofCorr" checked> Hiển thị giá trị đã hiệu chỉnh</label></div>
+      <div id="calStatus" class="hint" style="margin:4px 0"></div>
+      <table id="calTable" class="num" style="width:100%;border-collapse:collapse;font-size:13px"></table>
+    </div>
+  </section>
+
+  <!-- ==================== MPU ==================== -->
+  <section>
+    <h2>② Cảm biến góc MPU6050</h2>
+    <p class="hint">Làm theo 3 bước. Hiệu chỉnh mất 3 giây: đặt xe trên mặt phẳng và <b>không chạm vào xe</b>. Xoay xe ngược chiều kim đồng hồ (nhìn từ trên) thì yaw tăng.</p>
+    <div class="row">
+      <button id="btnMpuInit" disabled>1. Kết nối MPU</button>
+      <button id="btnMpuCal" disabled>2. Hiệu chỉnh (3 s)</button>
+      <button id="btnMpuOn" disabled>3. Xem góc trực tiếp</button>
+      <button id="btnMpuZero" disabled>Đặt yaw = 0</button>
+    </div>
+    <div class="row"><span id="mpuChip" class="chip">MPU: chưa kết nối</span><span id="calChip" class="chip">Chưa hiệu chỉnh</span></div>
+    <div class="bar" id="calBarWrap" hidden><i id="calBar"></i></div>
+    <div class="grid2" style="margin-top:10px">
+      <canvas id="compass" height="240"></canvas>
+      <div>
+        <div class="box"><div class="lbl">Yaw (hướng)</div><div class="big" id="yawTxt">–</div></div>
+        <div class="grid2" style="margin-top:8px">
+          <div class="box"><div class="lbl">Roll</div><div class="num" id="rollTxt" style="font-size:18px">–</div></div>
+          <div class="box"><div class="lbl">Pitch</div><div class="num" id="pitchTxt" style="font-size:18px">–</div></div>
+        </div>
+        <div class="box" style="margin-top:8px"><div class="lbl">Tốc độ quay gz</div><div class="num" id="gzTxt" style="font-size:18px">–</div></div>
+      </div>
+    </div>
+    <canvas id="yawChart" height="120" style="margin-top:10px"></canvas>
+  </section>
+
+  <!-- ==================== Motor ==================== -->
+  <section>
+    <h2>③ Động cơ N20</h2>
+    <p class="hint"><b>Kê xe lên cho bánh hở khỏi mặt đất</b> khi thử lần đầu. Nhấn giữ nút để chạy, thả ra là dừng. Có thể dùng phím mũi tên hoặc W A S D. Mất kết nối quá 0,5 s thì xe tự dừng.</p>
+    <div class="row">
+      <label class="inline">Tốc độ PWM <input type="range" id="pwm" min="10" max="100" value="40" style="width:180px"> <b id="pwmTxt" class="num">40%</b></label>
+    </div>
+    <div class="pad">
+      <span></span><button data-dir="fwd" disabled>▲ Tiến</button><span></span>
+      <button data-dir="left" disabled>⟲ Xoay trái</button><button data-dir="back" disabled>▼ Lùi</button><button data-dir="right" disabled>Xoay phải ⟳</button>
+    </div>
+    <div class="row" style="justify-content:center">
+      <button data-dir="onlyL" disabled>Chỉ bánh TRÁI tiến</button>
+      <button data-dir="onlyR" disabled>Chỉ bánh PHẢI tiến</button>
+    </div>
+    <div class="grid2" style="margin-top:8px">
+      <div class="box"><div class="lbl">Bánh trái – tốc độ</div><div class="num" id="spdLTxt">0 xung/s</div><div class="bar"><i id="spdL"></i></div></div>
+      <div class="box"><div class="lbl">Bánh phải – tốc độ</div><div class="num" id="spdRTxt">0 xung/s</div><div class="bar"><i id="spdR"></i></div></div>
+    </div>
+    <div class="row">
+      <label class="inline"><input type="checkbox" id="invML"> Đảo chiều động cơ trái</label>
+      <label class="inline"><input type="checkbox" id="invMR"> Đảo chiều động cơ phải</label>
+    </div>
+    <p class="hint" id="dirCheck">Firmware đã đảo sẵn chiều động cơ phải (lắp đối xứng). Kiểm tra: bấm <b>Tiến</b>. Cả hai bánh phải quay về phía trước và cả hai thanh tốc độ phải màu <b>xanh dương</b> (số xung tăng). Thanh màu cam nghĩa là encoder đếm ngược: tick "Đảo encoder" ở phần ④ rồi báo lại để sửa luôn trong firmware.</p>
+  </section>
+
+  <!-- ==================== Encoder ==================== -->
+  <section>
+    <h2>④ Encoder – số xung / 1 vòng bánh</h2>
+    <p class="hint">Bộ đếm x4 (đếm cả 2 sườn của kênh A và B). Lý thuyết: xung/vòng = 4 × PPR × tỉ số truyền.</p>
+    <div class="grid2">
+      <div class="box"><div class="lbl">Bánh trái</div><div class="big" id="encL">0</div><canvas id="wheelL" height="90"></canvas></div>
+      <div class="box"><div class="lbl">Bánh phải</div><div class="big" id="encR">0</div><canvas id="wheelR" height="90"></canvas></div>
+    </div>
+    <div class="row">
+      <button id="btnEncZero" disabled>Đưa về 0</button>
+      <label class="inline"><input type="checkbox" id="invEL"> Đảo encoder trái</label>
+      <label class="inline"><input type="checkbox" id="invER"> Đảo encoder phải</label>
+    </div>
+
+    <div class="box" style="margin-top:10px">
+      <b>Cách A – Quay tay (chính xác nhất)</b>
+      <ol class="steps">
+        <li>Dán một mẩu băng dính lên mỗi bánh làm dấu, rồi bấm <b>Đưa về 0</b>.</li>
+        <li>Quay tay <b>đúng N vòng</b> theo chiều tiến, dừng đúng ở dấu.</li>
+        <li>Nhập N rồi bấm <b>Tính</b>.</li>
+      </ol>
+      <div class="row">N = <input type="number" id="turns" value="10" min="1" step="1"> vòng <button id="btnCalcCpr" disabled>Tính</button></div>
+      <div id="cprResult"></div>
+    </div>
+
+    <div class="box" style="margin-top:10px">
+      <b>Cách B – Theo thông số động cơ</b>
+      <div class="row">PPR encoder <input type="number" id="ppr" value="7"> × tỉ số <input type="number" id="gear" value="50"> × 4 = <b class="num" id="cprTheory">1400</b> xung/vòng</div>
+    </div>
+
+    <div class="box" style="margin-top:10px">
+      <b>Kiểm tra – Cho bánh tự chạy đúng 1 vòng</b>
+      <div class="row">Số xung/vòng đang dùng <input type="number" id="cprUse" value="1400"> PWM <input type="number" id="goPwm" value="25" min="10" max="60">%</div>
+      <div class="row">
+        <button id="btnGoL" disabled>Bánh trái chạy 1 vòng</button>
+        <button id="btnGoR" disabled>Bánh phải chạy 1 vòng</button>
+      </div>
+      <p class="hint" style="margin:0">Nếu dấu băng dính dừng đúng chỗ cũ (lệch không quá vài độ do quán tính) thì số xung/vòng đã đúng.</p>
+      <div id="goResult"></div>
+    </div>
+
+    <div class="box" style="margin-top:10px">
+      <b>Quãng đường</b>
+      <div class="row">Đường kính bánh <input type="number" id="wheelD" value="43" step="0.1"> mm → <b class="num" id="mmPerCount">–</b> mm/xung</div>
+      <div class="row">Trái <b class="num" id="distL">0</b> mm · Phải <b class="num" id="distR">0</b> mm</div>
+    </div>
+  </section>
+
+  <section class="wide">
+    <details><summary>Nhật ký giao tiếp (để gỡ lỗi)</summary><div id="log"></div></details>
+  </section>
+</main>
+
+<script>
+/* ======================= Serial ======================= */
+const $ = id => document.getElementById(id);
+let port = null, writer = null, reader = null, connected = false;
+const enc = new TextEncoder();
+
+if (!('serial' in navigator)) {
+  $('banner').hidden = false;
+  $('banner').innerHTML = '⚠️ Trình duyệt này không hỗ trợ Web Serial. Hãy mở trang bằng <b>Google Chrome</b> hoặc <b>Microsoft Edge</b> trên máy tính.';
+  $('btnConn').disabled = true;
+}
+
+async function connect() {
+  if (connected) return disconnect();
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: +$('baud').value });
+  } catch (e) { log('! ' + e.message); return; }
+  writer = port.writable.getWriter();
+  connected = true;
+  setConnUi();
+  readLoop();
+  setTimeout(() => send('ping'), 200);
+}
+
+async function disconnect() {
+  try { await send('stop'); } catch {}
+  connected = false;
+  try { await reader?.cancel(); } catch {}
+  try { writer?.releaseLock(); await port.close(); } catch {}
+  setConnUi();
+}
+
+async function readLoop() {
+  const dec = new TextDecoder();
+  let buf = '';
+  while (port?.readable && connected) {
+    reader = port.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim();
+          buf = buf.slice(i + 1);
+          if (line) handle(line);
+        }
+      }
+    } catch (e) { log('! ' + e.message); break; }
+    finally { reader.releaseLock(); }
+  }
+  if (connected) { connected = false; setConnUi(); }
+}
+
+async function send(cmd) {
+  if (!connected) return;
+  if (!/^(m |ENC)/.test(cmd)) log('> ' + cmd);
+  await writer.write(enc.encode(cmd + '\n'));
+}
+
+let lastRx = 0;
+function setConnUi() {
+  $('dot').classList.toggle('on', connected);
+  $('btnConn').textContent = connected ? 'Ngắt kết nối' : 'Kết nối';
+  $('status').textContent = connected ? 'Đã mở cổng, đang chờ xe…' : 'Chưa kết nối';
+  document.querySelectorAll('main button').forEach(b => b.disabled = !connected);
+  if (connected) { $('btnMpuCal').disabled = $('btnMpuOn').disabled = $('btnMpuZero').disabled = !mpu.ok; }
+}
+setInterval(() => {
+  if (connected) $('status').textContent = Date.now() - lastRx < 1000 ? 'Đang nhận dữ liệu ✓' : 'Đã mở cổng, xe chưa trả lời (bấm RESET?)';
+}, 500);
+
+const logLines = [];
+function log(s) {
+  logLines.push(s); if (logLines.length > 200) logLines.shift();
+  const el = $('log'); el.textContent = logLines.join('\n'); el.scrollTop = el.scrollHeight;
+}
+
+/* ======================= Xử lý dữ liệu từ xe ======================= */
+const TOF_NAMES = ['L90', 'L45', 'M0', 'R45', 'R90'];
+const tof = { mm: [-1, -1, -1, -1, -1], raw: [-1, -1, -1, -1, -1], st: [null, null, null, null, null], hist: [[], [], [], [], []], started: false };
+/* hiệu chuẩn: mm_thật = gain * mm_thô + off; điểm đo [{d, raw}] */
+let tofCal = JSON.parse(localStorage.getItem('mm_tofcal') || 'null') || Array.from({ length: 5 }, () => ({ pts: [], gain: 1, off: 0 }));
+let calRun = null; /* {i, slot, d, samples, until} */
+const mpu = { ok: false, cal: false, yaw: 0, roll: 0, pitch: 0, gz: 0, hist: [] };
+const encS = { raw: [0, 0], spd: [0, 0] };
+
+function handle(line) {
+  lastRx = Date.now();
+  const p = line.split(',');
+  switch (p[0]) {
+    case 'ENC': encS.raw = [+p[1], +p[2]]; encS.spd = [+p[3], +p[4]]; updEnc(); return;
+    case 'TOF': {
+      const now = performance.now();
+      tof.raw = p.slice(1, 6).map(Number);
+      tof.mm = tof.raw.map((r, i) => r < 0 ? -1 : $('tofCorr').checked ? Math.round(tofCal[i].gain * r + tofCal[i].off) : r);
+      tof.raw.forEach((r, i) => { if (r >= 0) tof.hist[i].push([now, r]); tof.hist[i] = tof.hist[i].filter(q => now - q[0] < 1000); });
+      if (calRun) calTick(now);
+      updTofBars(); return;
+    }
+    case 'IMU':
+      mpu.yaw = +p[1]; mpu.roll = +p[2]; mpu.pitch = +p[3]; mpu.gz = +p[4];
+      if (p[5] !== undefined) {
+        const live = p[5] === '1';
+        $('mpuChip').className = 'chip ' + (live ? 'ok' : 'bad');
+        $('mpuChip').textContent = (live ? 'MPU đang gửi dữ liệu ✓' : 'MPU mất tín hiệu: kiểm tra dây I2C2 (PB10/PB3), nguồn MPU')
+          + (+p[6] ? ` · đã tự gỡ treo bus ${p[6]} lần` : '');
+      }
+      mpu.hist.push([performance.now(), mpu.yaw]); updMpu(); return;
+  }
+  log('< ' + line);
+  switch (p[0]) {
+    case 'HELLO': case 'PONG': break;
+    case 'I2C': {
+      const addrs = p.slice(2);
+      const name = p[1] === '1' ? 'I2C1 (ToF)' : 'I2C2 (MPU)';
+      const el = document.createElement('span');
+      const tofOff = p[1] === '1' && !addrs.length && !tof.started;
+      el.className = 'chip ' + (addrs.length ? 'ok' : tofOff ? '' : 'bad');
+      el.textContent = name + ': ' + (addrs.length ? addrs.map(a => '0x' + a).join(' ')
+        : tofOff ? 'ToF đang tắt (XSHUT thấp), bấm Khởi động ToF trước' : 'không có thiết bị');
+      if (p[1] === '1') $('scanOut').innerHTML = '';
+      $('scanOut').appendChild(el);
+      break;
+    }
+    case 'TOFI':
+      tof.st[+p[1]] = { ok: p[3] === '1', addr: p[2] }; tof.started = true; drawTofChips();
+      if (p[1] === '4') { $('scanOut').innerHTML = ''; send('scan'); } // quét lại sau khi bật xong 5 cảm biến
+      break;
+    case 'MPUI': {
+      const who = parseInt(p[1], 16);
+      mpu.ok = who !== 0;
+      $('mpuChip').className = 'chip ' + (mpu.ok ? 'ok' : 'bad');
+      $('mpuChip').textContent = mpu.ok
+        ? `MPU OK · địa chỉ 0x68 · WHO_AM_I = 0x${p[1]}${who === 0x68 ? '' : ' (bản clone, vẫn dùng được)'}`
+        : 'MPU không trả lời: kiểm tra I2C2 (PB10 / PB3)';
+      setConnUi();
+      break;
+    }
+    case 'CALP': $('calBarWrap').hidden = false; $('calBar').style.width = p[1] + '%'; break;
+    case 'CALD': {
+      $('calBar').style.width = '100%';
+      setTimeout(() => $('calBarWrap').hidden = true, 600);
+      const noise = +p[4], bz = +p[3];
+      const good = noise < 0.2 && Math.abs(bz) < 5;
+      mpu.cal = true;
+      $('calChip').className = 'chip ' + (good ? 'ok' : 'bad');
+      $('calChip').textContent = `Đã hiệu chỉnh · bias gz ${bz.toFixed(2)}°/s · nhiễu ${noise.toFixed(3)}°/s` + (good ? '' : ' (xe bị rung? làm lại)');
+      mpu.hist = [];
+      break;
+    }
+    case 'GOD': {
+      const side = +p[1], got = Math.abs(+p[2]), want = +$('cprUse').value;
+      const over = got - want;
+      $('goResult').innerHTML = `<div class="result">Bánh ${side ? 'phải' : 'trái'}: đặt ${want} xung, thực tế ${got} xung (vượt ${over} xung ≈ ${(over / want * 360).toFixed(1)}° do quán tính).<br>Nhìn dấu băng dính: nếu bánh dừng đúng chỗ cũ (cộng thêm phần vượt nhỏ đó) thì <b>${want} xung/vòng là đúng</b>.</div>`;
+      break;
+    }
+  }
+}
+
+/* ======================= ToF UI ======================= */
+function drawTofChips() {
+  $('tofChips').innerHTML = TOF_NAMES.map((n, i) => {
+    const s = tof.st[i];
+    if (!s) return `<span class="chip">${n}: chờ…</span>`;
+    return s.ok ? `<span class="chip ok">✓ ${n} · 0x${s.addr}</span>` : `<span class="chip bad">✗ ${n}: không thấy</span>`;
+  }).join('');
+}
+drawTofChips();
+
+$('tofBars').innerHTML = TOF_NAMES.map((n, i) =>
+  `<div class="row" style="margin:4px 0"><b style="width:36px">${n}</b><div class="bar" style="flex:1"><i id="tb${i}"></i></div><span class="num" id="tv${i}" style="width:80px;text-align:right">—</span><span class="num hint" id="ts${i}" style="width:80px;margin:0;text-align:right"></span></div>`).join('');
+const stats = a => { const n = a.length; if (!n) return [NaN, NaN]; const m = a.reduce((s, q) => s + q[1], 0) / n; return [m, Math.sqrt(a.reduce((s, q) => s + (q[1] - m) ** 2, 0) / n)]; };
+function updTofBars() {
+  const scale = +$('tofScale').value;
+  tof.mm.forEach((mm, i) => {
+    const ok = tof.st[i]?.ok;
+    $('tb' + i).style.width = ok && mm >= 0 ? Math.min(100, mm / scale * 100) + '%' : '0';
+    $('tb' + i).style.background = distColor(mm);
+    $('tv' + i).textContent = !ok ? '—' : mm < 0 ? 'ngoài tầm' : mm + ' mm';
+    const [, sd] = stats(tof.hist[i]);
+    $('ts' + i).textContent = ok && sd >= 0 ? '±' + sd.toFixed(1) : '';
+    $('ts' + i).title = 'Độ lệch chuẩn trong 1 giây gần nhất (nhiễu)';
+  });
+}
+
+$('calSensor').innerHTML = TOF_NAMES.map((n, i) => `<option value="${i}">${n}</option>`).join('');
+function fitCal(c) {
+  const p = c.pts.filter(Boolean);
+  if (p.length === 1) { c.gain = 1; c.off = p[0].d - p[0].raw; }
+  else if (p.length >= 2 && p[1].raw !== p[0].raw) { c.gain = (p[1].d - p[0].d) / (p[1].raw - p[0].raw); c.off = p[0].d - c.gain * p[0].raw; }
+  else { c.gain = 1; c.off = 0; }
+}
+function drawCalTable() {
+  const td = 'style="padding:4px 6px;border-bottom:1px solid var(--line)"';
+  let h = `<tr><th ${td} align="left">Cảm biến</th><th ${td}>Mốc 1 (thật → đo)</th><th ${td}>Mốc 2</th><th ${td}>Bù (offset)</th><th ${td}>Hệ số</th><th ${td} align="left">Đánh giá</th></tr>`;
+  tofCal.forEach((c, i) => {
+    const pt = k => c.pts[k] ? `${c.pts[k].d} → ${c.pts[k].raw.toFixed(1)} <span class="hint">±${c.pts[k].sd.toFixed(1)}</span>` : '—';
+    const has = c.pts.some(Boolean);
+    const big = Math.abs(c.off) > 30 || Math.abs(c.gain - 1) > 0.1;
+    h += `<tr><td ${td}><b>${TOF_NAMES[i]}</b></td><td ${td} align="center">${pt(0)}</td><td ${td} align="center">${pt(1)}</td>
+      <td ${td} align="center">${has ? (c.off >= 0 ? '+' : '') + c.off.toFixed(1) + ' mm' : '—'}</td><td ${td} align="center">${has ? c.gain.toFixed(3) : '—'}</td>
+      <td ${td}>${!has ? '<span class="hint">chưa đo</span>' : big ? '⚠️ lệch lớn: kiểm tra film, góc gắn, vật cản' : '✓ bình thường'}</td></tr>`;
+  });
+  $('calTable').innerHTML = h;
+}
+function saveCal() { localStorage.setItem('mm_tofcal', JSON.stringify(tofCal)); drawCalTable(); }
+function startCal(slot) {
+  const i = +$('calSensor').value, d = +$('calD').value;
+  if (!tof.st[i]?.ok) { $('calStatus').textContent = 'Cảm biến chưa chạy: bấm Khởi động ToF trước.'; return; }
+  if (!(d > 0)) return;
+  calRun = { i, slot, d, samples: [], until: performance.now() + 2000 };
+  $('calStatus').textContent = `Đang đo ${TOF_NAMES[i]} ở ${d} mm… giữ yên tấm bìa`;
+}
+function calTick(now) {
+  const r = tof.raw[calRun.i];
+  if (r >= 0) calRun.samples.push(r);
+  if (now < calRun.until) return;
+  const { i, slot, d, samples } = calRun; calRun = null;
+  if (samples.length < 10) { $('calStatus').textContent = `${TOF_NAMES[i]}: quá ít số đo hợp lệ (${samples.length}). Tấm bìa có nằm trong tầm cảm biến không?`; return; }
+  const m = samples.reduce((a, b) => a + b, 0) / samples.length;
+  const sd = Math.sqrt(samples.reduce((a, b) => a + (b - m) ** 2, 0) / samples.length);
+  tofCal[i].pts[slot] = { d, raw: m, sd };
+  fitCal(tofCal[i]); saveCal();
+  $('calStatus').textContent = `${TOF_NAMES[i]}: thật ${d} mm, đo trung bình ${m.toFixed(1)} mm (±${sd.toFixed(1)}, ${samples.length} mẫu) → sai ${(m - d).toFixed(1)} mm`;
+}
+$('btnCal1').onclick = () => startCal(0);
+$('btnCal2').onclick = () => startCal(1);
+$('btnCalClear').onclick = () => { tofCal[+$('calSensor').value] = { pts: [], gain: 1, off: 0 }; saveCal(); };
+drawCalTable();
+
+function distColor(mm) {
+  if (mm < 0) return '#9ca3af';
+  if (mm < 80) return '#dc2626';
+  if (mm < 180) return '#f59e0b';
+  return '#16a34a';
+}
+
+function fitCanvas(c) {
+  if (!c.dataset.h) c.dataset.h = c.getAttribute('height'); // chiều cao CSS gốc (c.height bị ghi đè bên dưới)
+  const r = devicePixelRatio || 1, w = c.clientWidth, h = +c.dataset.h;
+  if (c.width !== Math.round(w * r) || c.height !== Math.round(h * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); c.style.height = h + 'px'; }
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return [g, w, h];
+}
+
+function drawTof() {
+  const [g, w, h] = fitCanvas($('tofCanvas'));
+  g.clearRect(0, 0, w, h);
+  const scale = +$('tofScale').value, cx = w / 2, cy = h - 70, R = Math.min(w / 2 - 40, h - 100);
+  // vòng tham chiếu
+  g.strokeStyle = '#e5e7eb'; g.fillStyle = '#9ca3af'; g.font = '11px sans-serif'; g.textAlign = 'center';
+  for (let k = 1; k <= 4; k++) {
+    const rr = R * k / 4;
+    g.beginPath(); g.arc(cx, cy, rr, Math.PI, 2 * Math.PI); g.stroke();
+    g.fillText(Math.round(scale * k / 4) + ' mm', cx + rr - 18, cy + 12);
+  }
+  // thân xe
+  g.fillStyle = '#334155';
+  g.beginPath(); g.roundRect(cx - 34, cy - 20, 68, 80, 12); g.fill();
+  g.fillStyle = '#0f172a'; g.fillRect(cx - 42, cy + 10, 8, 30); g.fillRect(cx + 34, cy + 10, 8, 30);
+  g.fillStyle = '#fff'; g.font = '12px sans-serif'; g.fillText('XE', cx, cy + 25);
+  // 5 tia
+  const ang = [-90, -45, 0, 45, 90];
+  ang.forEach((a, i) => {
+    const t = (a - 90) * Math.PI / 180, mm = tof.mm[i], ok = tof.st[i]?.ok;
+    const sx = cx + 26 * Math.cos(t), sy = cy + 26 * Math.sin(t) - 6;
+    const len = mm >= 0 ? Math.min(mm, scale) / scale * R : R;
+    const ex = sx + len * Math.cos(t), ey = sy + len * Math.sin(t);
+    g.strokeStyle = ok ? distColor(mm) : '#d1d5db';
+    g.lineWidth = 6; g.lineCap = 'round';
+    if (mm < 0 || !ok) g.setLineDash([4, 8]);
+    g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke(); g.setLineDash([]);
+    if (ok && mm >= 0 && mm <= scale) { g.fillStyle = distColor(mm); g.beginPath(); g.arc(ex, ey, 7, 0, 7); g.fill(); }
+    // nhãn
+    const lx = cx + (R + 18) * Math.cos(t), ly = cy + (R + 18) * Math.sin(t);
+    g.fillStyle = '#111827'; g.font = 'bold 13px sans-serif';
+    g.fillText(TOF_NAMES[i], lx, ly - 8);
+    g.font = '15px ui-monospace, Menlo, monospace'; g.fillStyle = ok ? distColor(mm) : '#9ca3af';
+    g.fillText(!ok ? '—' : mm < 0 ? 'xa / lỗi' : mm + ' mm', lx, ly + 10);
+  });
+  g.lineWidth = 1;
+}
+
+/* ======================= MPU UI ======================= */
+function updMpu() {
+  $('yawTxt').textContent = mpu.yaw.toFixed(1) + '°';
+  $('rollTxt').textContent = mpu.roll.toFixed(1) + '°';
+  $('pitchTxt').textContent = mpu.pitch.toFixed(1) + '°';
+  $('gzTxt').textContent = mpu.gz.toFixed(1) + ' °/s';
+}
+
+function drawCompass() {
+  const [g, w, h] = fitCanvas($('compass'));
+  g.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 14;
+  g.strokeStyle = '#d1d5db'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke();
+  g.fillStyle = '#6b7280'; g.font = '11px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let d = 0; d < 360; d += 30) {
+    const t = (-d - 90) * Math.PI / 180; // yaw dương = ngược chiều kim đồng hồ
+    g.beginPath(); g.moveTo(cx + R * Math.cos(t), cy + R * Math.sin(t));
+    g.lineTo(cx + (R - (d % 90 ? 5 : 10)) * Math.cos(t), cy + (R - (d % 90 ? 5 : 10)) * Math.sin(t)); g.stroke();
+    if (d % 90 === 0) g.fillText(d > 180 ? d - 360 : d, cx + (R - 22) * Math.cos(t), cy + (R - 22) * Math.sin(t));
+  }
+  // xe xoay theo yaw
+  g.save(); g.translate(cx, cy); g.rotate(-mpu.yaw * Math.PI / 180);
+  g.fillStyle = '#2563eb'; g.beginPath(); g.roundRect(-18, -24, 36, 48, 8); g.fill();
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(0, -34); g.lineTo(-10, -18); g.lineTo(10, -18); g.closePath(); g.fill();
+  g.fillStyle = '#1e3a8a'; g.fillRect(-23, -2, 5, 18); g.fillRect(18, -2, 5, 18);
+  g.restore();
+  g.textBaseline = 'alphabetic';
+}
+
+function drawYawChart() {
+  const [g, w, h] = fitCanvas($('yawChart'));
+  g.clearRect(0, 0, w, h);
+  const now = performance.now(), span = 10000;
+  mpu.hist = mpu.hist.filter(p => now - p[0] < span);
+  let lo = -45, hi = 45;
+  for (const [, y] of mpu.hist) { lo = Math.min(lo, y - 10); hi = Math.max(hi, y + 10); }
+  const Y = v => h - 16 - (v - lo) / (hi - lo) * (h - 26);
+  g.strokeStyle = '#eef0f3'; g.fillStyle = '#9ca3af'; g.font = '10px sans-serif'; g.textAlign = 'left';
+  const step = (hi - lo) > 200 ? 90 : 45;
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) { g.beginPath(); g.moveTo(30, Y(v)); g.lineTo(w, Y(v)); g.stroke(); g.fillText(v + '°', 0, Y(v) + 3); }
+  g.fillText('yaw – 10 giây gần nhất', 34, h - 3);
+  g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath();
+  mpu.hist.forEach(([t, y], i) => { const x = 30 + (1 - (now - t) / span) * (w - 30); i ? g.lineTo(x, Y(y)) : g.moveTo(x, Y(y)); });
+  g.stroke(); g.lineWidth = 1;
+}
+
+/* ======================= Động cơ ======================= */
+let held = null, driveTimer = null;
+$('pwm').oninput = () => $('pwmTxt').textContent = $('pwm').value + '%';
+
+function driveVals(dir) {
+  const v = +$('pwm').value;
+  const m = { fwd: [v, v], back: [-v, -v], left: [-v, v], right: [v, -v], onlyL: [v, 0], onlyR: [0, v] }[dir] || [0, 0];
+  if ($('invML').checked) m[0] = -m[0];
+  if ($('invMR').checked) m[1] = -m[1];
+  return m;
+}
+function startDrive(dir) {
+  if (!connected || held === dir) return;
+  held = dir;
+  document.querySelectorAll('[data-dir]').forEach(b => b.classList.toggle('held', b.dataset.dir === dir));
+  const tick = () => { const [l, r] = driveVals(held); send(`m ${l} ${r}`); };
+  tick(); clearInterval(driveTimer); driveTimer = setInterval(tick, 150);
+}
+function stopDrive() {
+  if (!held) return;
+  held = null; clearInterval(driveTimer);
+  document.querySelectorAll('[data-dir]').forEach(b => b.classList.remove('held'));
+  send('stop');
+}
+document.querySelectorAll('[data-dir]').forEach(b => {
+  b.addEventListener('pointerdown', e => { b.setPointerCapture(e.pointerId); startDrive(b.dataset.dir); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, stopDrive));
+});
+const KEYS = { ArrowUp: 'fwd', w: 'fwd', ArrowDown: 'back', s: 'back', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+  if (e.key === ' ') { e.preventDefault(); stopAll(); return; }
+  const d = KEYS[e.key]; if (d) { e.preventDefault(); startDrive(d); }
+});
+addEventListener('keyup', e => { if (KEYS[e.key] === held) stopDrive(); });
+addEventListener('blur', stopDrive);
+function stopAll() { held = null; clearInterval(driveTimer); document.querySelectorAll('[data-dir]').forEach(b => b.classList.remove('held')); send('stop'); }
+$('btnStopAll').onclick = stopAll;
+
+/* ======================= Encoder ======================= */
+let encZero = [0, 0];
+const encVal = i => (encS.raw[i] - encZero[i]) * (($(i ? 'invER' : 'invEL').checked) ? -1 : 1);
+const spdVal = i => encS.spd[i] * (($(i ? 'invER' : 'invEL').checked) ? -1 : 1);
+
+function updEnc() {
+  const cpr = +$('cprUse').value || 1, d = +$('wheelD').value;
+  ['L', 'R'].forEach((s, i) => {
+    $('enc' + s).textContent = encVal(i).toLocaleString('vi');
+    const sp = spdVal(i), vmax = cpr * 6; // ~6 vòng/s làm mức đầy thang
+    $('spd' + s + 'Txt').textContent = `${Math.round(sp)} xung/s · ${(sp / cpr * 60).toFixed(0)} vòng/phút` + (d ? ` · ${(sp / cpr * Math.PI * d / 1000).toFixed(2)} m/s` : '');
+    $('spd' + s).style.width = Math.min(100, Math.abs(sp) / vmax * 100) + '%';
+    $('spd' + s).style.background = sp < 0 ? '#f59e0b' : '#2563eb';
+    $('dist' + s).textContent = (encVal(i) / cpr * Math.PI * d).toFixed(1);
+  });
+}
+
+function drawWheel(id, i) {
+  const [g, w, h] = fitCanvas($(id));
+  g.clearRect(0, 0, w, h);
+  const cpr = +$('cprUse').value || 1, v = encVal(i), turns = v / cpr;
+  const cx = 50, cy = h / 2, R = 38, a = turns * 2 * Math.PI - Math.PI / 2;
+  g.fillStyle = '#1f2937'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+  g.fillStyle = '#e5e7eb'; g.beginPath(); g.arc(cx, cy, R - 9, 0, 7); g.fill();
+  g.strokeStyle = '#9ca3af'; g.lineWidth = 2;
+  for (let k = 0; k < 4; k++) { const t = a + k * Math.PI / 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + (R - 9) * Math.cos(t), cy + (R - 9) * Math.sin(t)); g.stroke(); }
+  g.fillStyle = '#ef4444'; g.beginPath(); g.arc(cx + (R - 4) * Math.cos(a), cy + (R - 4) * Math.sin(a), 5, 0, 7); g.fill(); // dấu băng dính
+  g.lineWidth = 1;
+  g.fillStyle = '#111827'; g.font = '13px sans-serif'; g.textAlign = 'left';
+  g.fillText(`${turns.toFixed(2)} vòng`, 100, cy - 6);
+  g.fillStyle = '#6b7280'; g.font = '12px sans-serif';
+  g.fillText(`(theo ${cpr} xung/vòng)`, 100, cy + 12);
+}
+
+$('btnEncZero').onclick = () => { encZero = [...encS.raw]; updEnc(); };
+$('btnCalcCpr').onclick = () => {
+  const n = +$('turns').value;
+  if (!(n > 0)) return;
+  const cl = Math.abs(encVal(0)) / n, cr = Math.abs(encVal(1)) / n;
+  const avg = (cl + cr) / 2, th = +$('cprTheory').textContent;
+  const diff = Math.abs(cl - cr) / Math.max(avg, 1) * 100;
+  $('cprResult').innerHTML = `<div class="result">Trái: <b>${cl.toFixed(1)}</b> xung/vòng · Phải: <b>${cr.toFixed(1)}</b> xung/vòng<br>
+    Trung bình <b>${avg.toFixed(1)}</b> (lý thuyết ${th}) ${diff > 3 ? '⚠️ hai bánh lệch ' + diff.toFixed(1) + '%: quay lại cho đúng số vòng?' : '✓'}
+    <div class="row"><button id="btnUseCpr">Dùng ${Math.round(avg)} xung/vòng</button></div></div>`;
+  $('btnUseCpr').onclick = () => { $('cprUse').value = Math.round(avg); saveSettings(); updEnc(); };
+};
+const updTheory = () => { $('cprTheory').textContent = Math.round(4 * +$('ppr').value * +$('gear').value); };
+$('ppr').oninput = $('gear').oninput = () => { updTheory(); saveSettings(); };
+const go = side => { $('goResult').innerHTML = '<div class="result">Đang chạy…</div>'; send(`go ${side} ${+$('cprUse').value} ${Math.abs(+$('goPwm').value) * ((side ? $('invMR') : $('invML')).checked ? -1 : 1)}`); };
+$('btnGoL').onclick = () => go(0);
+$('btnGoR').onclick = () => go(1);
+$('wheelD').oninput = $('cprUse').oninput = () => {
+  $('mmPerCount').textContent = (Math.PI * +$('wheelD').value / +$('cprUse').value).toFixed(4); saveSettings(); updEnc();
+};
+
+/* ======================= Lưu cài đặt ======================= */
+const SAVE = ['invML', 'invMR', 'invEL', 'invER', 'ppr', 'gear', 'cprUse', 'wheelD', 'pwm', 'baud', 'tofScale', 'goPwm'];
+function saveSettings() {
+  const o = {}; SAVE.forEach(k => { const e = $(k); o[k] = e.type === 'checkbox' ? e.checked : e.value; });
+  localStorage.setItem('mm_hwtest2', JSON.stringify(o));
+}
+try {
+  const o = JSON.parse(localStorage.getItem('mm_hwtest2') || '{}');
+  SAVE.forEach(k => { if (k in o) { const e = $(k); e.type === 'checkbox' ? e.checked = o[k] : e.value = o[k]; } });
+} catch {}
+SAVE.forEach(k => $(k).addEventListener('change', saveSettings));
+$('pwmTxt').textContent = $('pwm').value + '%';
+updTheory(); $('wheelD').oninput();
+
+/* ======================= Nút bấm ======================= */
+$('btnConn').onclick = connect;
+$('btnTof').onclick = () => { tof.st = [null, null, null, null, null]; drawTofChips(); send('tof init'); send('tof on'); };
+$('btnTofStop').onclick = () => { send('tof off'); tof.mm = [-1, -1, -1, -1, -1]; };
+$('btnScan').onclick = () => { $('scanOut').innerHTML = ''; send('scan'); };
+$('btnMpuInit').onclick = () => send('mpu init');
+$('btnMpuCal').onclick = () => { $('calChip').className = 'chip'; $('calChip').textContent = 'Đang hiệu chỉnh… giữ yên xe!'; send('mpu cal'); };
+$('btnMpuOn').onclick = () => { send('mpu on'); if (!mpu.cal) log('! Chưa hiệu chỉnh: yaw sẽ bị trôi'); };
+$('btnMpuZero').onclick = () => { send('mpu zero'); mpu.hist = []; };
+navigator.serial?.addEventListener('disconnect', () => { connected = false; setConnUi(); });
+setConnUi();
+
+(function frame() { drawTof(); drawCompass(); drawYawChart(); drawWheel('wheelL', 0); drawWheel('wheelR', 1); requestAnimationFrame(frame); })();
+</script>
+</body>
+</html>
