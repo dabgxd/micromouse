@@ -1,0 +1,46 @@
+{
+  "_comment": "Đơn vị mm. Gốc toạ độ: góc dưới-trái ô 1 (tại vạch xuất phát), x sang phải, y lên trên.",
+  "tile_mm": 600,
+  "box_mm": 100,
+
+  "tiles": [
+    {"id": 1, "x0": 0,    "y0": 0,   "type": "straight", "dir": [0, 1]},
+    {"id": 2, "x0": 0,    "y0": 600, "type": "corner",   "inner": [600, 600],  "angles_deg": [180, 90]},
+    {"id": 3, "x0": 600,  "y0": 600, "type": "straight", "dir": [1, 0]},
+    {"id": 4, "x0": 1200, "y0": 600, "type": "corner",   "inner": [1200, 600], "angles_deg": [90, 0]},
+    {"id": 5, "x0": 1200, "y0": 0,   "type": "straight", "dir": [0, -1]}
+  ],
+  "parts_per_tile": {"straight": 6, "corner": 3},
+
+  "_comment_region": "Vùng xe được phép có mặt: 5 ô + phần sau vạch xuất phát và sau vạch đích (y < 0).",
+  "allowed_polygon": [
+    [0, -300], [600, -300], [600, 600], [1200, 600], [1200, -300],
+    [1800, -300], [1800, 1200], [0, 1200]
+  ],
+
+  "finish_line": {"y": 0, "x_min": 1200, "x_max": 1800},
+
+  "_comment_boxes": "Tâm box (mm), đánh số T1..T17 theo docs/map2d.jpg.",
+  "static_boxes": [
+    {"id": 1,  "x": 50,   "y": 150},
+    {"id": 2,  "x": 550,  "y": 250},
+    {"id": 3,  "x": 300,  "y": 350},
+    {"id": 4,  "x": 550,  "y": 450},
+    {"id": 5,  "x": 50,   "y": 550},
+    {"id": 6,  "x": 50,   "y": 750},
+    {"id": 7,  "x": 350,  "y": 900},
+    {"id": 8,  "x": 450,  "y": 1150},
+    {"id": 9,  "x": 650,  "y": 750},
+    {"id": 10, "x": 750,  "y": 650},
+    {"id": 11, "x": 850,  "y": 1000},
+    {"id": 12, "x": 950,  "y": 650},
+    {"id": 13, "x": 1150, "y": 1150},
+    {"id": 14, "x": 1250, "y": 850},
+    {"id": 15, "x": 1450, "y": 450},
+    {"id": 16, "x": 1450, "y": 150},
+    {"id": 17, "x": 1750, "y": 250}
+  ],
+
+  "_comment_random": "Box ngẫu nhiên đặt ở VỊ TRÍ BẤT KỲ (không theo lưới) miễn nằm gọn trong vùng các ô này.",
+  "random_box_tiles": [4, 5]
+}

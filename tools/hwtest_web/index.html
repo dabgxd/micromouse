@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Micromouse – Test phần cứng</title>
+<style>
+  :root {
+    --bg: #f3f5f9; --panel: #fff; --ink: #0f172a; --ink2: #334155; --muted: #64748b; --line: #e2e8f0; --soft: #f8fafc;
+    --accent: #2563eb; --accent-soft: #eff6ff; --ok: #16a34a; --ok-soft: #f0fdf4; --warn: #d97706; --warn-soft: #fffbeb;
+    --bad: #dc2626; --bad-soft: #fef2f2; --L: #2563eb; --R: #f59e0b; --purple: #7c3aed;
+    --shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 2px 6px rgba(15, 23, 42, .04);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); }
+  code { font: 12.5px ui-monospace, Menlo, monospace; background: #f1f5f9; padding: 1px 6px; border-radius: 5px; }
+  a { color: var(--accent); }
+
+  /* ---------- khung ---------- */
+  .top { position: sticky; top: 0; z-index: 20; height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 18px;
+         background: var(--panel); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: baseline; gap: 8px; font-size: 16px; }
+  .brand span { color: var(--muted); font-size: 13px; }
+  .conn { display: flex; align-items: center; gap: 8px; margin-left: 18px; padding: 5px 12px; border-radius: 999px; background: var(--soft); border: 1px solid var(--line); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #cbd5e1; flex: none; }
+  .dot.on { background: var(--ok); box-shadow: 0 0 0 3px #bbf7d0; }
+  .dot.wait { background: var(--warn); }
+  .spacer { flex: 1; }
+  .shell { display: grid; grid-template-columns: 236px 1fr; min-height: calc(100vh - 56px); }
+  .side { position: sticky; top: 56px; height: calc(100vh - 56px); overflow: auto; padding: 14px 10px; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 2px; }
+  .side a { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; color: var(--ink2); text-decoration: none; font-weight: 500; }
+  .side a i { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: var(--soft); border: 1px solid var(--line); font-style: normal; font-size: 12px; color: var(--muted); }
+  .side a:hover { background: var(--soft); }
+  .side a.active { background: var(--accent-soft); color: var(--accent); }
+  .side a.active i { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .side a .badge { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+  .badge.ok { background: var(--ok) !important; } .badge.warn { background: var(--warn) !important; } .badge.bad { background: var(--bad) !important; }
+  .side .group { margin: 12px 10px 4px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .live { margin-top: auto; padding: 10px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); font-size: 12px; color: var(--ink2); }
+  .live .k { color: var(--muted); }
+  .live .v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .live .tofmini { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; text-align: center; margin-top: 4px; }
+  .live .tofmini b { display: block; font-size: 10px; color: var(--muted); font-weight: 500; }
+  main { padding: 20px 24px 60px; min-width: 0; }
+  .page { display: none; max-width: 1280px; }
+  .page.active { display: block; }
+  .page-head { margin-bottom: 14px; }
+  .page-head h1 { font-size: 21px; margin: 0 0 2px; }
+  .page-head p { margin: 0; color: var(--muted); }
+
+  /* ---------- thành phần ---------- */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 4px; }
+  .card h3 { font-size: 13.5px; margin: 0 0 6px; color: var(--ink2); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid2 > .card, .grid3 > .card { margin-bottom: 0; }
+  .stack { display: flex; flex-direction: column; gap: 14px; }
+  .gap { margin-bottom: 14px; }
+  @media (max-width: 1150px) { .grid2, .grid3 { grid-template-columns: 1fr; } .shell { grid-template-columns: 200px 1fr; } }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 2px 0 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  .row.end { justify-content: flex-end; }
+  button { font: inherit; padding: 7px 13px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; transition: .12s; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover:not(:disabled) { background: #1d4ed8; color: #fff; }
+  button.danger { background: var(--bad); border-color: var(--bad); color: #fff; font-weight: 600; }
+  button.danger:hover:not(:disabled) { background: #b91c1c; color: #fff; }
+  button.big { font-size: 15px; padding: 10px 20px; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  input[type=number], select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; width: 90px; background: #fff; color: var(--ink); }
+  input[type=range] { accent-color: var(--accent); }
+  input:focus, select:focus { outline: 2px solid #bfdbfe; border-color: var(--accent); }
+  .field { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+  .field input, .field select { width: 100%; font-size: 15px; }
+  .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); font-size: 12.5px; background: var(--soft); color: var(--ink2); white-space: nowrap; }
+  .chip.ok { border-color: #bbf7d0; background: var(--ok-soft); color: #166534; }
+  .chip.warn { border-color: #fde68a; background: var(--warn-soft); color: #92400e; }
+  .chip.bad { border-color: #fecaca; background: var(--bad-soft); color: #991b1b; }
+  .chip.info { border-color: #bfdbfe; background: var(--accent-soft); color: #1e40af; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  td, th { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .bar { height: 8px; border-radius: 4px; background: #eef1f5; overflow: hidden; flex: 1; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .12s; }
+  canvas { width: 100%; display: block; }
+  canvas.framed { border: 1px solid var(--line); border-radius: 12px; background: var(--soft); }
+  .stat { border: 1px solid var(--line); border-radius: 11px; padding: 8px 11px; background: var(--panel); }
+  .stat .k { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .v { font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat .s { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+  .result { padding: 11px 13px; border-radius: 11px; background: var(--accent-soft); border: 1px solid #bfdbfe; margin-top: 10px; font-size: 13.5px; }
+  .result.ok { background: var(--ok-soft); border-color: #bbf7d0; }
+  .result.warn { background: var(--warn-soft); border-color: #fde68a; }
+  .steps { margin: 6px 0; padding-left: 20px; } .steps li { margin: 4px 0; }
+  details > summary { cursor: pointer; color: var(--ink2); font-weight: 500; margin: 4px 0; }
+  .center { text-align: center; }
+  .bigval { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .tofrow { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+  .tofrow b { width: 38px; }
+  .tofrow .num { width: 84px; text-align: right; }
+  .tofrow .noise { width: 60px; text-align: right; color: var(--muted); font-size: 12px; }
+  .pad { display: grid; grid-template-columns: repeat(3, 92px); grid-template-rows: repeat(2, 64px); gap: 8px; justify-content: center; user-select: none; margin: 10px 0; }
+  .pad button { font-size: 15px; font-weight: 600; touch-action: none; }
+  .pad button.held, .hold.held { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .checklist { list-style: none; padding: 0; margin: 10px 0 0; }
+  .checklist li { display: flex; gap: 8px; align-items: center; padding: 5px 0; color: var(--muted); }
+  .checklist li.run { color: var(--accent); font-weight: 600; }
+  .checklist li.ok { color: var(--ok); } .checklist li.bad { color: var(--bad); }
+  .statusgrid { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; }
+  .statusgrid a { font-size: 12.5px; text-decoration: none; }
+  textarea { width: 100%; font: 12px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 9px; padding: 10px; background: var(--soft); resize: vertical; }
+  #banner { margin: 12px 24px 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-soft); border: 1px solid #fde68a; }
+
+  /* ---------- thông báo, nhật ký ---------- */
+  #toasts { position: fixed; right: 18px; bottom: 18px; z-index: 50; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+  .toast { padding: 9px 14px; border-radius: 10px; background: #0f172a; color: #fff; font-size: 13px; box-shadow: 0 6px 18px rgba(0,0,0,.18); transition: .4s; max-width: 380px; }
+  .toast.ok { background: #166534; } .toast.warn { background: #92400e; } .toast.bad { background: #991b1b; }
+  .toast.out { opacity: 0; transform: translateY(6px); }
+  #logBtn { margin-top: 8px; font-size: 12px; padding: 5px 10px; }
+  #logPanel { position: fixed; left: 236px; right: 0; bottom: 0; height: 220px; z-index: 29; background: #0f172a; color: #cbd5e1; font: 12px ui-monospace, Menlo, monospace; padding: 10px 14px 10px; overflow: auto; white-space: pre; display: none; }
+  #logPanel.open { display: block; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">🐭 <b>Micromouse</b><span>Bảng test phần cứng</span></div>
+  <div class="conn"><span class="dot" id="dot"></span><span id="status">Chưa kết nối</span></div>
+  <div class="spacer"></div>
+  <label class="hint" style="margin:0">Baud <select data-cfg="baud" style="width:auto"><option>38400</option><option>115200</option></select></label>
+  <button id="btnConn" class="primary">Kết nối</button>
+  <button id="btnStop" class="danger" title="Phím Space">■ DỪNG</button>
+</header>
+<div id="banner" hidden></div>
+
+<div class="shell">
+  <nav class="side">
+    <a href="#home" data-page="home"><i>⌂</i>Tổng quan<b class="badge"></b></a>
+    <div class="group">Cảm biến</div>
+    <a href="#i2c" data-page="i2c"><i>1</i>Bus I2C<b class="badge" id="bd-i2c"></b></a>
+    <a href="#tof" data-page="tof"><i>2</i>ToF khoảng cách<b class="badge" id="bd-tof"></b></a>
+    <a href="#mpu" data-page="mpu"><i>3</i>MPU góc quay<b class="badge" id="bd-mpu"></b></a>
+    <div class="group">Truyền động</div>
+    <a href="#motor" data-page="motor"><i>4</i>Động cơ & encoder<b class="badge" id="bd-motor"></b></a>
+    <a href="#pid" data-page="pid"><i>5</i>PID tốc độ<b class="badge" id="bd-pid"></b></a>
+    <div class="group">Chuyển động</div>
+    <a href="#straight" data-page="straight"><i>6</i>Chạy thẳng<b class="badge" id="bd-straight"></b></a>
+    <a href="#rotate" data-page="rotate"><i>7</i>Quay tại chỗ<b class="badge" id="bd-rotate"></b></a>
+    <div class="group">Khác</div>
+    <a href="#settings" data-page="settings"><i>⚙</i>Thông số & sao lưu<b class="badge"></b></a>
+    <div class="live">
+      <div class="row" style="margin:0;justify-content:space-between"><span class="k">Yaw</span><span class="v" id="lvYaw">–</span></div>
+      <div class="row" style="margin:2px 0 0;justify-content:space-between"><span class="k">Encoder T / P</span><span class="v" id="lvEnc">–</span></div>
+      <div class="tofmini" id="lvTof"></div>
+    </div>
+    <button id="logBtn">Nhật ký giao tiếp ▴</button>
+  </nav>
+
+  <main>
+  <!-- ======================================== TỔNG QUAN ======================================== -->
+  <section class="page" id="pg-home">
+    <div class="page-head"><h1>Tổng quan</h1><p>Làm lần lượt theo menu bên trái, hoặc bấm "Khởi động nhanh" để chuẩn bị mọi cảm biến trong một lần.</p></div>
+    <div class="card" id="connGuide">
+      <h2>Kết nối với xe</h2>
+      <ol class="steps">
+        <li>Nạp firmware test (trong thư mục <code>firmware/</code>): <code>pio run -e hwtest -t upload</code>. Đèn PC13 trên board nháy đều là đúng.</li>
+        <li>Nối USB-TTL (RX → PA2, TX → PA3, chung GND) <b>hoặc</b> ghép đôi HC-05 với máy tính.</li>
+        <li>Chọn baud <b>38400</b>, bấm <b>Kết nối</b> ở góc trên rồi chọn cổng. Thấy "Đang nhận dữ liệu" là xong.</li>
+      </ol>
+    </div>
+    <div class="grid2 gap">
+      <div class="card">
+        <h2>Khởi động nhanh</h2>
+        <p class="hint">Quét I2C → bật 5 ToF → kết nối MPU → hiệu chuẩn MPU (3 s, <b>để xe nằm yên</b>) → yaw = 0.</p>
+        <button id="btnQuick" class="primary big" disabled>▶ Khởi động nhanh</button>
+        <ul class="checklist" id="quickList"></ul>
+      </div>
+      <div class="card">
+        <h2>Trạng thái</h2>
+        <div class="statusgrid" id="statusGrid"></div>
+      </div>
+    </div>
+    <div class="grid3">
+      <div class="card"><h3>ToF (mm)</h3><canvas id="cvHomeTof" height="180"></canvas></div>
+      <div class="card"><h3>Hướng xe (MPU)</h3><canvas id="cvHomeCompass" height="150"></canvas><div class="center bigval" id="homeYaw">–</div></div>
+      <div class="card"><h3>Encoder</h3>
+        <div class="stats">
+          <div class="stat"><div class="k">Trái</div><div class="v" id="homeEncL">–</div><div class="s" id="homeSpdL"></div></div>
+          <div class="stat"><div class="k">Phải</div><div class="v" id="homeEncR">–</div><div class="s" id="homeSpdR"></div></div>
+        </div>
+        <p class="hint" style="margin-top:10px">Quay tay từng bánh theo chiều tiến: số xung phải <b>tăng</b>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================== I2C ======================================== -->
+  <section class="page" id="pg-i2c">
+    <div class="page-head"><h1>Bus I2C</h1><p>I2C1 (PB8/PB9) nối 5 ToF, I2C2 (PB10/PB3) nối MPU6050. Địa chỉ ToF chỉ có sau khi khởi động ToF.</p></div>
+    <div class="card">
+      <div class="row">
+        <button id="btnScan" disabled>Quét 1 lần</button>
+        <button id="btnStab" class="primary" disabled>Kiểm tra ổn định (20 lần)</button>
+        <span id="scanProg" class="chip" hidden></span>
+      </div>
+      <p class="hint">Quét 20 lần liên tiếp: thiết bị nào có lần mất (ví dụ 17/20) là đang chập chờn do dây lỏng hoặc nhiễu.</p>
+      <table id="i2cTable"></table>
+    </div>
+  </section>
+
+  <!-- ======================================== ToF ======================================== -->
+  <section class="page" id="pg-tof">
+    <div class="page-head"><h1>Cảm biến khoảng cách ToF</h1><p>5 × VL53L0X được bật lần lượt bằng XSHUT và gán địa chỉ 0x30–0x34. Đưa tay lại gần từng cảm biến, tia tương ứng sẽ ngắn lại.</p></div>
+    <div class="grid2 gap">
+      <div class="card">
+        <div class="row">
+          <button id="btnTof" class="primary" disabled>Khởi động ToF</button>
+          <span id="tofChips"></span>
+          <span class="spacer"></span>
+          <label class="hint" style="margin:0">Thang <select id="tofScale" style="width:auto"><option value="300">300 mm</option><option value="500" selected>500 mm</option><option value="1000">1000 mm</option></select></label>
+        </div>
+        <canvas id="cvTof" height="320"></canvas>
+      </div>
+      <div class="card">
+        <h2>Số đo</h2>
+        <p class="hint">Cột ± là độ nhiễu (độ lệch chuẩn trong 1 giây gần nhất). Cảm biến nhiễu nhiều hơn hẳn các con khác là có vấn đề phần cứng.</p>
+        <div id="tofBars"></div>
+        <label class="row"><input type="checkbox" data-cfg="tofApply"> Hiển thị giá trị đã hiệu chuẩn</label>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Hiệu chuẩn từng cảm biến</h2>
+      <ol class="steps">
+        <li>Bóc miếng film bảo vệ trên mắt cảm biến, kiểm tra cảm biến được gắn thẳng.</li>
+        <li>Đặt tấm bìa <b>phẳng, màu sáng</b> vuông góc với cảm biến, cách <b>mặt cảm biến</b> đúng D mm (đo bằng thước).</li>
+        <li>Chọn cảm biến, nhập D rồi bấm <b>Đo mốc 1</b> (lấy trung bình 2 s). Đo thêm mốc 2 ở khoảng cách khác thì web tính được cả hệ số tỉ lệ.</li>
+      </ol>
+      <div class="row">
+        <select id="calSensor" style="width:90px"></select>
+        D = <input type="number" id="calD" value="100" min="20" max="1000"> mm
+        <button id="btnCal1" disabled>Đo mốc 1</button>
+        <button id="btnCal2" disabled>Đo mốc 2</button>
+        <button id="btnCalClear">Xoá cảm biến này</button>
+        <span id="calStatus" class="hint" style="margin:0"></span>
+      </div>
+      <table id="calTable" class="num"></table>
+    </div>
+  </section>
+
+  <!-- ======================================== MPU ======================================== -->
+  <section class="page" id="pg-mpu">
+    <div class="page-head"><h1>MPU6050 – góc quay</h1><p>Yaw dương = xe quay ngược chiều kim đồng hồ (nhìn từ trên). Khi xe đứng yên, firmware tự bù trôi gyro và ngừng cộng dồn yaw.</p></div>
+    <div class="grid2 gap">
+      <div class="card">
+        <div class="row">
+          <button id="btnMpu" class="primary" disabled>1. Kết nối MPU</button>
+          <button id="btnCal" disabled>2. Hiệu chuẩn (3 s)</button>
+          <button id="btnZero" disabled>3. Yaw = 0</button>
+        </div>
+        <div class="row"><span id="mpuChip" class="chip">MPU: chưa kết nối</span><span id="calChip" class="chip">Chưa hiệu chuẩn</span><span id="stillChip" class="chip" hidden></span></div>
+        <div class="bar" id="calBarWrap" hidden style="margin:8px 0"><i id="calBar"></i></div>
+        <div class="grid2" style="align-items:center;margin-top:6px">
+          <canvas id="cvCompass" height="210"></canvas>
+          <div class="stack" style="gap:8px">
+            <div class="stat"><div class="k">Yaw</div><div class="v" id="yawTxt" style="font-size:30px">–</div></div>
+            <div class="grid2" style="gap:8px">
+              <div class="stat"><div class="k">Roll</div><div class="v" id="rollTxt" style="font-size:16px">–</div></div>
+              <div class="stat"><div class="k">Pitch</div><div class="v" id="pitchTxt" style="font-size:16px">–</div></div>
+            </div>
+            <div class="stat"><div class="k">Tốc độ quay</div><div class="v" id="gzTxt" style="font-size:16px">–</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card"><canvas id="cvYaw" height="170"></canvas></div>
+        <div class="card">
+          <h2>Hệ số gyro – sửa sai số tích luỹ khi quay nhiều vòng</h2>
+          <ol class="steps">
+            <li>Hiệu chuẩn xong, đặt xe sát một mép thẳng để đánh dấu hướng.</li>
+            <li>Bấm <b>Bắt đầu</b>, xoay xe bằng tay <b>đúng N vòng cùng một chiều</b>, đặt lại đúng hướng cũ, chờ 1 giây.</li>
+            <li>Bấm <b>Xong</b>: web tính hệ số và gửi lên xe. Lặp 2–3 lần.</li>
+          </ol>
+          <div class="row">N = <input type="number" data-cfg="scaleN" min="1" step="1"> vòng
+            <button id="btnScaleStart" disabled>Bắt đầu</button><button id="btnScaleDone" disabled>Xong</button>
+            <button id="btnScaleReset" disabled>Đặt lại = 1</button><span class="chip info" id="scaleChip"></span></div>
+          <div id="scaleResult"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================== ĐỘNG CƠ & ENCODER ======================================== -->
+  <section class="page" id="pg-motor">
+    <div class="page-head"><h1>Động cơ & encoder</h1><p>⚠️ Kê xe lên cho bánh hở khỏi mặt đất khi thử lần đầu. Thả nút là dừng; mất kết nối quá 0,5 s xe cũng tự dừng.</p></div>
+    <div class="grid2 gap">
+      <div class="card">
+        <h2>Lái tay</h2>
+        <div class="row">Tốc độ PWM <input type="range" data-cfg="drive.pwm" min="10" max="100" style="width:200px"> <b class="num" id="pwmTxt"></b></div>
+        <div class="pad">
+          <span></span><button class="hold" data-dir="fwd" disabled>▲ Tiến</button><span></span>
+          <button class="hold" data-dir="left" disabled>⟲ Trái</button><button class="hold" data-dir="back" disabled>▼ Lùi</button><button class="hold" data-dir="right" disabled>Phải ⟳</button>
+        </div>
+        <div class="row" style="justify-content:center">
+          <button class="hold" data-dir="onlyL" disabled>Chỉ bánh trái</button>
+          <button class="hold" data-dir="onlyR" disabled>Chỉ bánh phải</button>
+        </div>
+        <p class="hint center">Bàn phím: ← ↑ → ↓ hoặc W A S D (khi đang ở trang này). Space để dừng.</p>
+        <div class="grid2" style="gap:8px">
+          <div class="stat"><div class="k">Tốc độ bánh trái</div><div class="s" id="spdLTxt">–</div><div class="bar" style="margin-top:4px"><i id="spdLBar"></i></div></div>
+          <div class="stat"><div class="k">Tốc độ bánh phải</div><div class="s" id="spdRTxt">–</div><div class="bar" style="margin-top:4px"><i id="spdRBar"></i></div></div>
+        </div>
+        <p class="hint" style="margin-top:8px">Bấm Tiến: cả hai bánh quay về phía trước và cả hai thanh màu xanh (số xung tăng). Thanh màu cam = đếm ngược.</p>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-top:0"><h2 style="margin:0">Encoder</h2><span class="spacer"></span><button id="btnEncZero">Đưa về 0</button></div>
+        <div class="grid2" style="gap:10px">
+          <div class="stat"><div class="k">Bánh trái</div><div class="v" id="encLTxt">0</div><canvas id="cvWheelL" height="96"></canvas></div>
+          <div class="stat"><div class="k">Bánh phải</div><div class="v" id="encRTxt">0</div><canvas id="cvWheelR" height="96"></canvas></div>
+        </div>
+        <div class="row">Quãng đường: trái <b class="num" id="distLTxt">0</b> mm · phải <b class="num" id="distRTxt">0</b> mm <span class="hint" style="margin:0" id="mmpcTxt"></span></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Kiểm tra số xung / 1 vòng bánh</h2>
+      <p class="hint">Lý thuyết: PPR <input type="number" data-cfg="enc.ppr" style="width:60px"> × tỉ số truyền <input type="number" data-cfg="enc.gear" style="width:70px"> × 4 = <b id="cprTheory"></b> xung/vòng. Đang dùng <b id="cprUseTxt"></b> (sửa ở trang Thông số).</p>
+      <div class="grid3">
+        <div class="stat">
+          <h3>A. Quay tay (chính xác nhất)</h3>
+          <ol class="steps hint" style="margin:0 0 6px"><li>Dán băng dính làm dấu, bấm "Đưa về 0".</li><li>Quay tay đúng N vòng theo chiều tiến.</li></ol>
+          <div class="row">N = <input type="number" data-cfg="enc.turns" min="1" style="width:70px"> <button id="btnCprCalc">Tính</button></div>
+          <div id="cprResult"></div>
+        </div>
+        <div class="stat">
+          <h3>B. Chạy kín vòng (PID) N vòng</h3>
+          <div class="fields" style="grid-template-columns:repeat(3,1fr)">
+            <label class="field">Số vòng<input type="number" data-cfg="enc.n" step="0.25"></label>
+            <label class="field">Tốc độ (vòng/s)<input type="number" data-cfg="enc.vrev" step="0.5"></label>
+            <label class="field">Gia tốc (vòng/s²)<input type="number" data-cfg="enc.arev" step="1"></label>
+          </div>
+          <div class="row"><button class="mvb" data-mv="L" disabled>Trái</button><button class="mvb" data-mv="R" disabled>Phải</button><button class="mvb primary" data-mv="B" disabled>Cả hai</button><button class="mvb" data-mv="back" disabled>Lùi cả hai</button></div>
+          <div id="mvResult"></div>
+          <canvas id="cvMv" height="110"></canvas>
+        </div>
+        <div class="stat">
+          <h3>C. Chạy hở 1 vòng (để so sánh)</h3>
+          <div class="row">PWM <input type="number" data-cfg="enc.goPwm" min="10" max="60" style="width:64px"> %</div>
+          <div class="row"><button class="gob" data-go="0" disabled>Trái</button><button class="gob" data-go="1" disabled>Phải</button><button class="gob" data-go="2" disabled>Cả hai</button></div>
+          <p class="hint">Không PID: chạy đến đủ xung thì phanh, nên vượt đích do quán tính, càng nhanh càng vượt nhiều.</p>
+          <div id="goResult"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================================== PID ======================================== -->
+  <section class="page" id="pg-pid">
+    <div class="page-head"><h1>PID tốc độ bánh xe</h1><p>Mỗi bánh: PWM = bù trước (đặc tính động cơ) + Kp·sai + Ki·∫sai + Kd·(v đặt − v thực). Bộ này được dùng cho mọi chuyển động.</p></div>
+    <div class="grid2 gap">
+      <div class="card">
+        <h2>1. Đặc tính động cơ (bù trước)</h2>
+        <p class="hint">⚠️ Kê bánh lên. Đo PWM để bánh bắt đầu quay và tốc độ ở 7 mức PWM (~10 s). Đo lại khi đổi pin hoặc động cơ.</p>
+        <div class="row"><button id="btnIdent" class="primary" disabled>Tự đo đặc tính</button><span class="chip" id="ffChip"></span></div>
+        <div id="identOut" class="num"></div>
+      </div>
+      <div class="card">
+        <h2>2. Hệ số PID</h2>
+        <div class="fields">
+          <label class="field">Kp (%/xung)<input type="number" data-cfg="kp" step="0.05"></label>
+          <label class="field">Ki (%/(xung·s))<input type="number" data-cfg="ki" step="0.5"></label>
+          <label class="field">Kd (%/(xung/s))<input type="number" data-cfg="kd" step="0.005"></label>
+        </div>
+        <p class="hint" style="margin-top:10px">Đổi số là gửi lên xe ngay. Rung / dao động → giảm Kp hoặc tăng Kd. Dừng thiếu vài xung → tăng Ki. Sai tốc độ lớn khi chạy → đo lại bước 1.</p>
+      </div>
+    </div>
+    <div class="card">
+      <h2>3. Chạy liên tục vòng kín</h2>
+      <p class="hint">⚠️ Kê bánh lên. Kéo thanh tốc độ ngay trong lúc chạy; xe giữ đúng tốc độ bằng bù trước + PID. Mất kết nối quá 0,6 s thì tự giảm tốc về 0.</p>
+      <div class="row">
+        <select data-cfg="vel.mode" style="width:auto"><option value="fwd">▲ Tiến</option><option value="back">▼ Lùi</option><option value="spin">⟳ Xoay tại chỗ</option></select>
+        Tốc độ <input type="range" data-cfg="vel.rev" min="0" max="6" step="0.1" style="width:240px"> <b class="num" id="velTxt"></b>
+        · gia tốc <input type="number" data-cfg="vel.acc" step="1" style="width:64px"> vòng/s²
+        <button id="btnVel" class="primary" disabled>▶ Chạy</button>
+      </div>
+      <div class="grid2" style="gap:8px">
+        <div class="stat"><div class="k">Bánh trái</div><div class="s" id="velStatL">–</div></div>
+        <div class="stat"><div class="k">Bánh phải</div><div class="s" id="velStatR">–</div></div>
+      </div>
+      <canvas id="cvVel" height="180" style="margin-top:10px"></canvas>
+      <div class="grid2"><canvas id="cvVelPwm" height="120"></canvas><canvas id="cvVelErr" height="120"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>4. Test bậc thang tự động</h2>
+      <div class="row">Từ <input type="number" data-cfg="vel.a" step="0.5" style="width:64px"> đến <input type="number" data-cfg="vel.b" step="0.5" style="width:64px"> vòng/s, bước <input type="number" data-cfg="vel.step" step="0.5" style="width:64px">, mỗi mức <input type="number" data-cfg="vel.dur" step="0.5" style="width:64px"> s
+        <button id="btnStair" disabled>▶ Chạy test</button></div>
+      <p class="hint">Ổn định ✓ = sai tốc độ ≤ 3 %, dao động ≤ 6 %, PWM chưa chạm 100 %, lệch vị trí ≤ 60 xung. Chỉ số dao động có ý nghĩa từ ~2 vòng/s.</p>
+      <div id="stairOut"></div>
+    </div>
+  </section>
+
+  <!-- ======================================== CHẠY THẲNG ======================================== -->
+  <section class="page" id="pg-straight">
+    <div class="page-head"><h1>Chạy thẳng có giữ hướng</h1><p>Profile hình thang cho tâm xe. Mỗi 1 ms: dv = Kh·(hướng đặt − yaw) − Kg·gz kéo xe về thẳng; mỗi bánh PID vị trí + ghép chéo Kc để hai bánh đi đều.</p></div>
+    <div class="card">
+      <div class="fields">
+        <label class="field">Quãng đường (mm)<input type="number" data-cfg="st.dist" step="10" min="10"></label>
+        <label class="field">Vận tốc tối đa (mm/s)<input type="number" data-cfg="st.vel" step="50" min="20"></label>
+        <label class="field">Gia tốc (mm/s²)<input type="number" data-cfg="st.acc" step="100" min="100"></label>
+        <label class="field" title="Góc so với hướng lúc xuất phát; dùng để bù khi xe đi xéo đều">Góc giữ (°)<input type="number" data-cfg="st.yaw" step="0.5"></label>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" data-cfg="st.gyro"> Dùng MPU giữ hướng</label>
+        <span class="hint" style="margin:0" id="stPresets">Nhanh: <a href="#" data-d="200">200</a> · <a href="#" data-d="500">500</a> · <a href="#" data-d="1000">1000</a> · <a href="#" data-d="2000">2000 mm</a></span>
+      </div>
+      <details>
+        <summary>Hệ số nâng cao</summary>
+        <div class="fields" style="margin-top:6px">
+          <label class="field">Kh: xung/s cho mỗi 1° lệch<input type="number" data-cfg="st.kh" step="5"></label>
+          <label class="field">Kg: giảm dao động theo tốc độ quay<input type="number" data-cfg="st.kg" step="0.5"></label>
+          <label class="field">Kc: ghép chéo 2 bánh (%/xung)<input type="number" data-cfg="st.kc" step="0.05"></label>
+        </div>
+        <p class="hint">Xe lắc qua lại → giảm Kh hoặc tăng Kg. Xe vẫn lệch dần → tăng Kh. Gyro tốt mà xe đi xéo đều → chỉnh "Góc giữ" vài độ. Hai bánh lệch nhau nhiều → tăng Kc. Kp/Ki/Kd ở trang PID.</p>
+      </details>
+      <div class="row">
+        <button id="btnRun" class="primary big" disabled>▶ Bắt đầu chạy</button>
+        <span id="preCheck" class="hint" style="margin:0"></span>
+      </div>
+    </div>
+    <div class="card">
+      <canvas id="cvSim" class="framed" height="300"></canvas>
+      <div class="row" style="justify-content:space-between">
+        <span class="hint" style="margin:0">Nhìn từ trên, lưới 100 mm. Đường đi tính từ encoder + yaw; 5 tia là số đo ToF thật.</span>
+        <label class="hint" style="margin:0"><input type="checkbox" data-cfg="st.exag"> Phóng đại lệch ngang ×5</label>
+      </div>
+      <div class="stats" style="margin-top:6px">
+        <div class="stat"><div class="k">Quãng đường</div><div class="v" id="sDist">–</div><div class="bar" style="margin-top:4px"><i id="sDistBar"></i></div></div>
+        <div class="stat"><div class="k">Tốc độ</div><div class="v" id="sVel">–</div></div>
+        <div class="stat"><div class="k">Sai hướng</div><div class="v" id="sYaw">–</div></div>
+        <div class="stat"><div class="k">Lệch ngang</div><div class="v" id="sLat">–</div></div>
+        <div class="stat"><div class="k">Trái / phải</div><div class="v" id="sLR" style="font-size:15px">–</div></div>
+        <div class="stat"><div class="k">PWM trái / phải</div><div class="v" id="sPwm" style="font-size:15px">–</div></div>
+      </div>
+    </div>
+    <div class="grid2 gap">
+      <div class="card"><h3>ToF trong lúc chạy</h3><div id="runTof"></div></div>
+      <div class="card"><canvas id="cvHead" height="160"></canvas></div>
+    </div>
+    <div class="grid2 gap">
+      <div class="card"><canvas id="cvStVel" height="150"></canvas></div>
+      <div class="card"><canvas id="cvStErr" height="150"></canvas><div class="hint num" id="encErrTxt" style="margin:4px 0 0"></div></div>
+    </div>
+    <div class="card"><h2>Kết quả</h2><div id="runResult" class="hint">Chưa chạy.</div>
+      <details style="margin-top:10px"><summary>Lịch sử các lần chạy</summary><table id="histTable"></table></details></div>
+  </section>
+
+  <!-- ======================================== QUAY TẠI CHỖ ======================================== -->
+  <section class="page" id="pg-rotate">
+    <div class="page-head"><h1>Quay tại chỗ</h1><p>Vòng ngoài MPU so góc đặt với yaw thật (không bị ảnh hưởng khi bánh trượt); vòng trong PID encoder từng bánh. Cuối hành trình xe giảm tốc theo góc còn lại thật và bò chậm tới đích.</p></div>
+    <div class="card">
+      <div class="row">
+        <button class="primary big rotb" data-a="90" disabled>⟲ 90° trái</button>
+        <button class="primary big rotb" data-a="-90" disabled>90° phải ⟳</button>
+        <button class="rotb" data-a="180" disabled>⟲ 180°</button>
+        <button class="rotb" data-a="-180" disabled>180° ⟳</button>
+        <button class="rotb" data-a="360" disabled>⟲ 360°</button>
+        <button class="rotb" data-a="-360" disabled>360° ⟳</button>
+        <span class="spacer"></span>
+        Góc <input type="number" data-cfg="rot.ang" step="5" style="width:70px">° <button id="btnRotC" class="rotb" disabled>Quay</button>
+      </div>
+      <div class="row">
+        <span class="hint" style="margin:0">Test lặp (phải về đúng hướng cũ):</span>
+        <button class="seqb" data-s="-90,-90,-90,-90" disabled>4 × 90° phải</button>
+        <button class="seqb" data-s="90,90,90,90" disabled>4 × 90° trái</button>
+        <button class="seqb" data-s="180,-180" disabled>180° rồi quay lại</button>
+        <button class="seqb" data-s="90,-90,90,-90,90,-90" disabled>Trái/phải xen kẽ ×3</button>
+      </div>
+      <details>
+        <summary>Thông số quay</summary>
+        <div class="fields" style="margin-top:6px">
+          <label class="field">Tốc độ quay tối đa (°/s)<input type="number" data-cfg="rot.wmax" step="30"></label>
+          <label class="field">Gia tốc góc (°/s²)<input type="number" data-cfg="rot.alpha" step="250"></label>
+          <label class="field">Kt: (°/s) cho mỗi 1° sai<input type="number" data-cfg="rot.kt" step="1"></label>
+          <label class="field">Ktd: bám tốc độ quay<input type="number" data-cfg="rot.ktd" step="0.1"></label>
+        </div>
+        <div class="row"><label><input type="checkbox" data-cfg="rot.gyro"> Dùng MPU sửa góc</label><span class="hint" style="margin:0" id="trackTxt"></span></div>
+        <p class="hint">Quay vượt rồi giật ngược → giảm Kt hoặc giảm tốc độ quay. Dừng thiếu → tăng Kt. Khoảng cách 2 bánh (trang Thông số) quyết định phần encoder; web đề xuất giá trị đúng sau mỗi lần quay có MPU.</p>
+      </details>
+    </div>
+    <div class="grid2 gap">
+      <div class="card"><canvas id="cvRot" class="framed" height="280"></canvas></div>
+      <div class="card">
+        <div class="grid2" style="gap:8px">
+          <div class="stat"><div class="k">Góc đặt</div><div class="v" id="rRef">–</div></div>
+          <div class="stat"><div class="k">Góc thực (MPU)</div><div class="v" id="rMeas">–</div></div>
+          <div class="stat"><div class="k">Sai góc</div><div class="v" id="rErr">–</div></div>
+          <div class="stat"><div class="k">Tốc độ quay</div><div class="v" id="rGz">–</div></div>
+        </div>
+        <div class="stat" style="margin-top:8px"><div class="k">Encoder trái / phải · sai lệch PID</div><div class="v" id="rEnc" style="font-size:14px">–</div></div>
+        <div class="stat" style="margin-top:8px"><div class="k">PWM trái / phải · bù gyro dω</div><div class="v" id="rPwm" style="font-size:14px">–</div></div>
+      </div>
+    </div>
+    <div class="grid2 gap">
+      <div class="card"><canvas id="cvRotAng" height="150"></canvas></div>
+      <div class="card"><canvas id="cvRotErr" height="150"></canvas></div>
+    </div>
+    <div class="card"><h2>Kết quả</h2><div id="rotResult" class="hint">Chưa quay.</div>
+      <details style="margin-top:10px"><summary>Lịch sử quay</summary><table id="rotHist"></table></details></div>
+  </section>
+
+  <!-- ======================================== THÔNG SỐ ======================================== -->
+  <section class="page" id="pg-settings">
+    <div class="page-head"><h1>Thông số & sao lưu</h1><p>Mọi thông số và kết quả hiệu chuẩn được lưu trong trình duyệt này. Xuất file JSON để mang sang máy khác, hoặc xuất mã C cho firmware chính.</p></div>
+    <div class="grid2 gap">
+      <div class="card">
+        <h2>Thông số cơ khí</h2>
+        <div class="fields">
+          <label class="field">Xung / 1 vòng bánh<input type="number" data-cfg="cpr"></label>
+          <label class="field">Chu vi bánh (mm)<input type="number" data-cfg="circ" step="0.5"></label>
+          <label class="field">Khoảng cách tâm 2 bánh (mm)<input type="number" data-cfg="track" step="0.5"></label>
+        </div>
+        <p class="hint num" id="mechDerived" style="margin-top:10px"></p>
+      </div>
+      <div class="card">
+        <h2>Kết quả hiệu chuẩn đang dùng</h2>
+        <table id="calSummary"></table>
+      </div>
+    </div>
+    <div class="grid2 gap">
+      <div class="card">
+        <h2>Sao lưu</h2>
+        <p class="hint">File JSON chứa toàn bộ thông số, hiệu chuẩn và lịch sử chạy.</p>
+        <div class="row">
+          <button id="btnExport" class="primary">⬇ Xuất file JSON</button>
+          <label class="hint" style="margin:0"><button id="btnImportBtn">⬆ Nhập file JSON</button><input type="file" id="importFile" accept=".json" hidden></label>
+          <button id="btnReset">Đặt lại mặc định</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Xuất cho firmware chính</h2>
+        <p class="hint">Dán vào <code>firmware/lib/common/robot_config.h</code> (hoặc file cấu hình của code chính).</p>
+        <textarea id="cOut" rows="12" readonly></textarea>
+        <div class="row end"><button id="btnCopyC">Sao chép</button></div>
+      </div>
+    </div>
+  </section>
+  </main>
+</div>
+
+<div id="logPanel"></div>
+<div id="toasts"></div>
+
+<script>
+/* ============================================================================================
+ * Tiện ích
+ * ============================================================================================ */
+const $ = id => document.getElementById(id);
+const $$ = sel => [...document.querySelectorAll(sel)];
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const TOF = ['L90', 'L45', 'M0', 'R45', 'R90'];
+const TOF_ANG = [90, 45, 0, -45, -90]; // độ, dương = bên trái xe
+const f1 = x => (x >= 0 ? '+' : '') + x.toFixed(1);
+
+function toast(msg, kind = '') {
+  const d = document.createElement('div');
+  d.className = 'toast ' + kind; d.textContent = msg;
+  $('toasts').appendChild(d);
+  setTimeout(() => d.classList.add('out'), 3200);
+  setTimeout(() => d.remove(), 3700);
+}
+const logLines = [];
+function log(s) {
+  logLines.push(s); if (logLines.length > 300) logLines.shift();
+  const el = $('logPanel');
+  if (el.classList.contains('open')) { el.textContent = logLines.join('\n'); el.scrollTop = el.scrollHeight; }
+}
+$('logBtn').onclick = () => {
+  const el = $('logPanel'); el.classList.toggle('open');
+  $('logBtn').textContent = el.classList.contains('open') ? 'Nhật ký giao tiếp ▾' : 'Nhật ký giao tiếp ▴';
+  el.textContent = logLines.join('\n'); el.scrollTop = el.scrollHeight;
+};
+function setChip(id, cls, text) { const e = $(id); e.className = 'chip ' + cls; e.textContent = text; e.hidden = false; }
+
+/* ============================================================================================
+ * Cấu hình (lưu trong localStorage)
+ * ============================================================================================ */
+const DEFAULTS = {
+  baud: '38400', cpr: 1400, circ: 140, track: 68,
+  kp: 0.4, ki: 3, kd: 0.01, ff: null, gscale: 1,
+  tofCal: null, tofApply: true,
+  st: { dist: 500, vel: 300, acc: 1000, yaw: 0, gyro: true, kh: 30, kg: 3, kc: 0.2, exag: true },
+  rot: { wmax: 360, alpha: 2000, kt: 8, ktd: 0.5, gyro: true, ang: 45 },
+  drive: { pwm: 40 },
+  enc: { turns: 10, n: 1, vrev: 2, arev: 8, goPwm: 25, ppr: 7, gear: 50 },
+  vel: { mode: 'fwd', rev: 1, acc: 8, a: 1, b: 5, step: 1, dur: 2.5 },
+  scaleN: 5,
+};
+const CFG_KEY = 'mm_cfg_v1';
+function merge(base, over) {
+  for (const k in over) {
+    if (over[k] && typeof over[k] === 'object' && !Array.isArray(over[k]) && base[k] && typeof base[k] === 'object') merge(base[k], over[k]);
+    else if (k in base) base[k] = over[k];
+  }
+  return base;
+}
+function loadCfg() {
+  const c = merge(structuredClone(DEFAULTS), JSON.parse(localStorage.getItem(CFG_KEY) || '{}'));
+  if (!localStorage.getItem(CFG_KEY)) { // lấy lại kết quả đã đo từ các bản web trước
+    try {
+      const ff = JSON.parse(localStorage.getItem('mm_ff') || 'null'); if (ff) c.ff = ff;
+      const g = +localStorage.getItem('mm_gscale'); if (g > 0) c.gscale = g;
+      const tc = JSON.parse(localStorage.getItem('mm_tofcal') || 'null'); if (Array.isArray(tc) && tc.length === 5) c.tofCal = tc;
+      const d = JSON.parse(localStorage.getItem('mm_dash') || '{}');
+      const map = { pKp: 'kp', pKi: 'ki', pKd: 'kd', pCpr: 'cpr', pCirc: 'circ', pKh: 'st.kh', pKg: 'st.kg', pKc: 'st.kc', rW: 'rot.wmax', rA: 'rot.alpha', rKt: 'rot.kt', rKtd: 'rot.ktd' };
+      for (const k in map) if (d[k] !== undefined && d[k] !== '') setPath(c, map[k], +d[k]);
+      if (+d.rTrack > 0 && +d.rTrack !== 80) c.track = +d.rTrack; // 80 là mặc định cũ (chưa đo)
+    } catch {}
+  }
+  if (!Array.isArray(c.tofCal) || c.tofCal.length !== 5) c.tofCal = TOF.map(() => ({ pts: [], gain: 1, off: 0 }));
+  return c;
+}
+function getPath(o, p) { return p.split('.').reduce((a, k) => a?.[k], o); }
+function setPath(o, p, v) { const ks = p.split('.'), last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; }
+let cfg = loadCfg();
+const saveCfg = () => localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+saveCfg();
+
+function bindInputs() {
+  $$('[data-cfg]').forEach(el => {
+    const p = el.dataset.cfg, v = getPath(cfg, p);
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    el.addEventListener(el.type === 'range' ? 'input' : 'change', () => {
+      const nv = el.type === 'checkbox' ? el.checked : (el.type === 'number' || el.type === 'range') ? +el.value : el.value;
+      setPath(cfg, p, nv); saveCfg();
+      $$(`[data-cfg="${p}"]`).forEach(o => { if (o !== el) o.type === 'checkbox' ? o.checked = nv : o.value = nv; });
+      onCfg(p);
+    });
+  });
+}
+function setCfg(p, v) {
+  setPath(cfg, p, v); saveCfg();
+  $$(`[data-cfg="${p}"]`).forEach(el => el.type === 'checkbox' ? el.checked = !!v : el.value = v);
+  onCfg(p);
+}
+function onCfg(p) {
+  if (['kp', 'ki', 'kd'].includes(p)) sendPid();
+  if (p === 'drive.pwm') $('pwmTxt').textContent = cfg.drive.pwm + '%';
+  if (p === 'vel.rev' || p === 'circ') updVelTxt();
+  if (p === 'tofApply') applyTofCal();
+  if (p === 'st.gyro') preCheck();
+  updDerived();
+}
+const cpr = () => +cfg.cpr || 1400;
+const mmpc = () => (+cfg.circ || 140) / cpr();                 // mm mỗi xung
+const cpd = () => (+cfg.track / 2) * Math.PI / 180 / mmpc();     // xung mỗi độ quay tại chỗ
+
+/* ============================================================================================
+ * Kết nối Web Serial
+ * ============================================================================================ */
+const link = { port: null, writer: null, reader: null, connected: false, lastRx: 0, lines: 0 };
+const te = new TextEncoder();
+if (!('serial' in navigator)) {
+  $('banner').hidden = false;
+  $('banner').innerHTML = '⚠️ Trình duyệt này không hỗ trợ Web Serial. Hãy mở trang bằng <b>Google Chrome</b> hoặc <b>Microsoft Edge</b> trên máy tính.';
+  $('btnConn').disabled = true;
+}
+async function connect() {
+  if (link.connected) return disconnect();
+  try {
+    link.port = await navigator.serial.requestPort();
+    await link.port.open({ baudRate: +cfg.baud });
+  } catch (e) { log('! ' + e.message); if (!/No port selected/.test(e.message)) toast('Không mở được cổng: ' + e.message, 'bad'); return; }
+  link.writer = link.port.writable.getWriter();
+  link.connected = true; ui();
+  readLoop();
+  setTimeout(() => send('ping'), 300);
+}
+async function disconnect() {
+  try { await send('stop'); } catch {}
+  link.connected = false;
+  try { await link.reader?.cancel(); } catch {}
+  try { link.writer?.releaseLock(); await link.port.close(); } catch {}
+  onLinkLost(); ui();
+}
+async function readLoop() {
+  const dec = new TextDecoder(); let buf = '';
+  while (link.port?.readable && link.connected) {
+    link.reader = link.port.readable.getReader();
+    try {
+      for (;;) {
+        const { value, done } = await link.reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (l) handle(l); }
+      }
+    } catch (e) { log('! ' + e.message); break; }
+    finally { link.reader.releaseLock(); }
+  }
+  if (link.connected) { link.connected = false; onLinkLost(); ui(); toast('Mất kết nối với xe', 'bad'); }
+}
+async function send(cmd) {
+  if (!link.connected) return;
+  if (!/^(m|vel) /.test(cmd)) log('> ' + cmd);
+  try { await link.writer.write(te.encode(cmd + '\n')); } catch (e) { log('! ' + e.message); }
+}
+navigator.serial?.addEventListener('disconnect', () => { if (link.connected) { link.connected = false; onLinkLost(); ui(); } });
+function onLinkLost() { stopDrive(true); velStop(true); run.active = false; rot.active = false; rotAbort(); }
+setInterval(() => {
+  if (!link.connected) return;
+  const alive = Date.now() - link.lastRx < 1000;
+  $('dot').className = 'dot ' + (alive ? 'on' : 'wait');
+  $('status').textContent = alive ? `Đang nhận dữ liệu · ${link.lines} dòng/s` : 'Đã mở cổng, xe chưa trả lời';
+  link.lines = 0;
+}, 1000);
+
+/* Chờ một sự kiện từ xe (ví dụ TOFI cuối cùng, CALD...) */
+const waiters = [];
+function waitFor(type, pred = () => true, ms = 5000) {
+  return new Promise(resolve => {
+    const w = { type, pred, resolve };
+    w.t = setTimeout(() => { waiters.splice(waiters.indexOf(w), 1); resolve(null); }, ms);
+    waiters.push(w);
+  });
+}
+function notifyWaiters(p) {
+  for (const w of [...waiters]) if (w.type === p[0] && w.pred(p)) { clearTimeout(w.t); waiters.splice(waiters.indexOf(w), 1); w.resolve(p); }
+}
+
+/* ============================================================================================
+ * Trạng thái
+ * ============================================================================================ */
+const tof = { raw: [-1, -1, -1, -1, -1], mm: [-1, -1, -1, -1, -1], st: [null, null, null, null, null], started: false, hist: [[], [], [], [], []] };
+const mpu = { ok: false, who: null, cal: false, yaw: 0, roll: 0, pitch: 0, gz: 0, live: false, still: false, bias: 0, rec: 0, hist: [] };
+const enc = { c: [0, 0], spd: [0, 0], zero: [0, 0], seen: false };
+
+/* ============================================================================================
+ * Nhận dữ liệu
+ * ============================================================================================ */
+function handle(line) {
+  link.lastRx = Date.now(); link.lines++;
+  const p = line.split(',');
+  const n = i => +p[i];
+  switch (p[0]) { // telemetry tần số cao: không ghi nhật ký
+    case 'ENC': enc.c = [n(1), n(2)]; enc.spd = [n(3), n(4)]; enc.seen = true; updEnc(); return;
+    case 'TOF': onTof(p.slice(1, 6).map(Number)); return;
+    case 'IMU': onImu(p.slice(1).map(Number)); return;
+    case 'MVT': mvHist.push([performance.now(), n(1), n(2)]); return;
+    case 'VLT': velHist.push([performance.now(), ...p.slice(1, 9).map(Number)]); return;
+    case 'STT': onStt(p.slice(1).map(Number)); return;
+    case 'RTT': onRtt(p.slice(1).map(Number)); return;
+  }
+  log('< ' + line);
+  switch (p[0]) {
+    case 'HELLO':
+      if (tof.started || mpu.ok) toast('Xe vừa khởi động lại: cần khởi động lại ToF và MPU', 'warn');
+      tof.started = false; tof.st = [null, null, null, null, null]; mpu.ok = false; mpu.cal = false; drawTofChips(); updMpuChips();
+      sendParams(); break;
+    case 'PONG': sendParams(); break;
+    case 'I2C': onI2c(n(1), p.slice(2).map(a => parseInt(a, 16))); break;
+    case 'TOFI':
+      tof.st[n(1)] = { ok: p[3] === '1', addr: p[2] }; tof.started = true; drawTofChips();
+      if (p[1] === '4') {
+        send('tof on'); scanOnce();
+        const k = tof.st.filter(s => s?.ok).length;
+        toast(`ToF: ${k}/5 cảm biến chạy`, k === 5 ? 'ok' : 'warn');
+      }
+      break;
+    case 'MPUI':
+      mpu.who = p[1]; mpu.ok = parseInt(p[1], 16) !== 0;
+      if (mpu.ok) { send('mpu scale ' + (+cfg.gscale).toFixed(5)); send('mpu on'); }
+      toast(mpu.ok ? 'MPU đã kết nối' : 'MPU không trả lời: kiểm tra I2C2 (PB10/PB3)', mpu.ok ? 'ok' : 'bad');
+      updMpuChips(); ui(); break;
+    case 'CALP': $('calBarWrap').hidden = false; $('calBar').style.width = p[1] + '%'; break;
+    case 'CALD': {
+      $('calBar').style.width = '100%'; setTimeout(() => $('calBarWrap').hidden = true, 500);
+      mpu.cal = true; mpu.noise = n(4); mpu.hist = [];
+      toast(`MPU đã hiệu chuẩn · nhiễu ${n(4).toFixed(3)}°/s`, mpu.noise < 0.2 ? 'ok' : 'warn');
+      updMpuChips(); preCheck(); break;
+    }
+    case 'GOD': onGod(n(1), n(2), n(3), p[4] === '1'); break;
+    case 'MVD': onMvd(n(1), n(2), n(3), n(4), p[5] === '1'); break;
+    case 'VLD': break;
+    case 'IDS': ident.dead = [n(1), n(2)]; drawIdent(); break;
+    case 'IDN': ident.pts.push([n(1), n(2), n(3)]); drawIdent(); break;
+    case 'IDD': fitIdent(); break;
+    case 'STD': onStd(p.slice(1).map(Number)); break;
+    case 'RTD': onRtd(p.slice(1).map(Number)); break;
+    case 'LOG': if (/Lenh la|huy|khong/i.test(p.slice(1).join(','))) toast(p.slice(1).join(','), 'warn'); break;
+  }
+  notifyWaiters(p);
+  updBadges();
+}
+function sendParams() {
+  send(`pid ${+cfg.kp} ${+cfg.ki} ${+cfg.kd}`);
+  if (cfg.ff) send('ff ' + cfg.ff.map(v => (+v).toFixed(2)).join(' '));
+}
+function sendPid() { send(`pid ${+cfg.kp} ${+cfg.ki} ${+cfg.kd}`); }
+
+/* ============================================================================================
+ * Trạng thái giao diện
+ * ============================================================================================ */
+function ui() {
+  const c = link.connected;
+  $('btnConn').textContent = c ? 'Ngắt kết nối' : 'Kết nối';
+  if (!c) { $('dot').className = 'dot'; $('status').textContent = 'Chưa kết nối'; }
+  $('connGuide').hidden = c;
+  ['btnQuick', 'btnScan', 'btnStab', 'btnTof', 'btnMpu', 'btnIdent', 'btnStair', 'btnVel'].forEach(id => $(id).disabled = !c);
+  ['btnCal', 'btnZero', 'btnScaleStart', 'btnScaleDone', 'btnScaleReset'].forEach(id => $(id).disabled = !c || !mpu.ok);
+  ['btnCal1', 'btnCal2'].forEach(id => $(id).disabled = !c || !tof.started);
+  $$('.hold, .mvb, .gob').forEach(b => b.disabled = !c);
+  $('btnRun').disabled = !c || rot.active;
+  $('btnRun').textContent = run.active ? '■ Dừng' : '▶ Bắt đầu chạy';
+  $('btnRun').className = run.active ? 'danger big' : 'primary big';
+  $$('.rotb, .seqb').forEach(b => b.disabled = !c || rot.active || run.active);
+  preCheck(); updBadges();
+}
+function updBadges() {
+  const set = (id, cls) => { const e = $(id); if (e) e.className = 'badge ' + (cls || ''); };
+  set('bd-i2c', i2cStatus()[0]);
+  const k = tof.st.filter(s => s?.ok).length;
+  set('bd-tof', !tof.started ? '' : k === 5 ? 'ok' : k ? 'warn' : 'bad');
+  set('bd-mpu', mpu.cal ? 'ok' : mpu.ok ? 'warn' : mpu.who === '00' ? 'bad' : '');
+  set('bd-motor', enc.seen ? 'ok' : '');
+  set('bd-pid', cfg.ff ? (cfg.ff.length > 4 ? 'ok' : 'warn') : '');
+  set('bd-straight', lastRunCls);
+  set('bd-rotate', lastRotCls);
+  drawStatusGrid();
+}
+function drawStatusGrid() {
+  const k = tof.st.filter(s => s?.ok).length, [ic, it] = i2cStatus();
+  const rows = [
+    ['Bus I2C', ic, it, 'i2c'],
+    ['ToF', !tof.started ? '' : k === 5 ? 'ok' : k ? 'warn' : 'bad', tof.started ? `${k}/5 cảm biến chạy` : 'chưa khởi động', 'tof'],
+    ['MPU', mpu.cal ? 'ok' : mpu.ok ? 'warn' : '', mpu.cal ? `đã hiệu chuẩn · hệ số ${(+cfg.gscale).toFixed(4)}` : mpu.ok ? 'chưa hiệu chuẩn' : 'chưa kết nối', 'mpu'],
+    ['Đặc tính động cơ', cfg.ff ? (cfg.ff.length > 4 ? 'ok' : 'warn') : '', cfg.ff ? (cfg.ff.length > 4 ? 'đã đo' : 'thiếu mức khởi động: đo lại') : 'chưa đo (dùng mặc định)', 'pid'],
+    ['Cơ khí', 'info', `${cfg.cpr} xung/vòng · chu vi ${cfg.circ} mm · 2 bánh ${cfg.track} mm`, 'settings'],
+  ];
+  $('statusGrid').innerHTML = rows.map(([name, cls, txt, pg]) =>
+    `<b>${name}</b><span class="chip ${cls}">${txt}</span><a href="#${pg}">Mở →</a>`).join('');
+}
+
+/* ============================================================================================
+ * Điều hướng trang
+ * ============================================================================================ */
+let page = 'home';
+function showPage() {
+  const id = (location.hash || '#home').slice(1);
+  page = $('pg-' + id) ? id : 'home';
+  $$('.page').forEach(s => s.classList.toggle('active', s.id === 'pg-' + page));
+  $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
+  if (page !== 'motor') stopDrive();
+  if (page === 'settings') drawSettings();
+}
+addEventListener('hashchange', showPage);
+
+/* ============================================================================================
+ * Khởi động nhanh
+ * ============================================================================================ */
+$('btnQuick').onclick = async () => {
+  const steps = [
+    ['Quét I2C', async () => { scanOnce(); return !!(await waitFor('I2C', p => p[1] === '2', 3000)); }],
+    ['Bật 5 ToF', async () => { tof.st = [null, null, null, null, null]; send('tof init'); const r = await waitFor('TOFI', p => p[1] === '4', 8000); return r && tof.st.some(s => s?.ok); }],
+    ['Kết nối MPU', async () => { send('mpu init'); const r = await waitFor('MPUI', () => true, 3000); return r && parseInt(r[1], 16) !== 0; }],
+    ['Hiệu chuẩn MPU (giữ yên xe 3 s)', async () => { send('mpu cal'); return !!(await waitFor('CALD', () => true, 7000)); }],
+    ['Yaw = 0', async () => { send('mpu zero'); mpu.hist = []; return true; }],
+  ];
+  $('btnQuick').disabled = true;
+  const li = steps.map(([t]) => `<li>○ ${t}</li>`);
+  $('quickList').innerHTML = li.join('');
+  const items = [...$('quickList').children];
+  let okAll = true;
+  for (let i = 0; i < steps.length; i++) {
+    items[i].className = 'run'; items[i].textContent = '◌ ' + steps[i][0] + '…';
+    const ok = await steps[i][1]();
+    items[i].className = ok ? 'ok' : 'bad'; items[i].textContent = (ok ? '✓ ' : '✗ ') + steps[i][0];
+    if (!ok) okAll = false;
+    if (!link.connected) break;
+  }
+  toast(okAll ? 'Đã sẵn sàng' : 'Có bước chưa đạt, xem danh sách', okAll ? 'ok' : 'warn');
+  $('btnQuick').disabled = !link.connected;
+};
+
+/* ============================================================================================
+ * ① I2C
+ * ============================================================================================ */
+const EXPECT = [
+  ...TOF.map((nm, i) => ({ bus: 1, addr: 0x30 + i, name: 'ToF ' + nm, tof: true })),
+  { bus: 1, addr: 0x29, name: 'ToF chưa đổi địa chỉ', optional: true },
+  { bus: 2, addr: 0x68, name: 'MPU6050' },
+];
+let scanRound = null, scanStats = null, stabRun = null;
+function scanOnce() { scanRound = { 1: null, 2: null }; send('scan'); }
+function onI2c(bus, addrs) {
+  if (!scanRound) scanRound = { 1: null, 2: null };
+  scanRound[bus] = addrs;
+  if (!scanRound[1] || !scanRound[2]) return;
+  const r = scanRound; scanRound = null;
+  if (!stabRun || !scanStats) scanStats = { n: 0, seen: {} };
+  scanStats.n++;
+  for (const b of [1, 2]) for (const a of r[b]) scanStats.seen[b + ':' + a] = (scanStats.seen[b + ':' + a] || 0) + 1;
+  drawI2c();
+  if (stabRun) {
+    $('scanProg').textContent = `${scanStats.n}/${stabRun.total}`;
+    if (scanStats.n < stabRun.total) setTimeout(scanOnce, 150);
+    else { stabRun = null; setChip('scanProg', 'ok', `xong ${scanStats.n} lần`); }
+  }
+}
+function i2cStatus() {
+  const s = scanStats;
+  if (!s?.n) return ['', 'chưa quét'];
+  const need = EXPECT.filter(e => !e.optional && (!e.tof || tof.started));
+  const full = need.filter(e => (s.seen[e.bus + ':' + e.addr] || 0) === s.n).length;
+  if (full === need.length) return ['ok', `đủ ${full} thiết bị, ổn định`];
+  return [full ? 'warn' : 'bad', `${full}/${need.length} thiết bị ổn định`];
+}
+function drawI2c() {
+  const s = scanStats || { n: 0, seen: {} };
+  let h = '<tr><th>Thiết bị</th><th>Bus</th><th>Địa chỉ</th><th>Kết quả</th></tr>';
+  const known = new Set();
+  for (const e of EXPECT) {
+    const k = e.bus + ':' + e.addr; known.add(k);
+    const c = s.seen[k] || 0;
+    if (e.optional && !c) continue;
+    let st;
+    if (!s.n) st = '<span class="hint">chưa quét</span>';
+    else if (e.optional) st = `<span class="chip warn">${c}/${s.n}: còn ToF ở địa chỉ gốc</span>`;
+    else if (c === s.n) st = `<span class="chip ok">✓ ${c}/${s.n} ổn định</span>`;
+    else if (c === 0) st = e.tof && !tof.started ? '<span class="chip">ToF chưa khởi động</span>' : `<span class="chip bad">✗ 0/${s.n} không thấy</span>`;
+    else st = `<span class="chip warn">⚠ ${c}/${s.n} chập chờn</span>`;
+    h += `<tr><td>${e.name}</td><td>I2C${e.bus}</td><td class="num">0x${e.addr.toString(16).toUpperCase()}</td><td>${st}</td></tr>`;
+  }
+  for (const k in s.seen) if (!known.has(k)) {
+    const [b, a] = k.split(':').map(Number);
+    h += `<tr><td>Thiết bị lạ</td><td>I2C${b}</td><td class="num">0x${a.toString(16).toUpperCase()}</td><td><span class="chip warn">${s.seen[k]}/${s.n}</span></td></tr>`;
+  }
+  $('i2cTable').innerHTML = h;
+  updBadges();
+}
+$('btnScan').onclick = () => { stabRun = null; scanStats = null; $('scanProg').hidden = true; scanOnce(); };
+$('btnStab').onclick = () => { scanStats = { n: 0, seen: {} }; stabRun = { total: 20 }; setChip('scanProg', 'info', '0/20'); scanOnce(); };
+
+/* ============================================================================================
+ * ② ToF
+ * ============================================================================================ */
+const tofColor = mm => mm < 0 ? '#94a3b8' : mm < 80 ? '#dc2626' : mm < 180 ? '#f59e0b' : '#16a34a';
+function drawTofChips() {
+  $('tofChips').innerHTML = TOF.map((nm, i) => { const s = tof.st[i]; return !s ? '' : `<span class="chip ${s.ok ? 'ok' : 'bad'}">${s.ok ? '✓' : '✗'} ${nm}${s.ok ? ' · 0x' + s.addr : ''}</span> `; }).join('');
+  ui();
+}
+const tofRow = (pre, i) => `<div class="tofrow"><b>${TOF[i]}</b><div class="bar"><i id="${pre}b${i}"></i></div><span class="num" id="${pre}v${i}">—</span>${pre === 't' ? `<span class="noise" id="tn${i}"></span>` : ''}</div>`;
+$('tofBars').innerHTML = TOF.map((_, i) => tofRow('t', i)).join('');
+$('runTof').innerHTML = TOF.map((_, i) => tofRow('r', i)).join('');
+$('lvTof').innerHTML = TOF.map((nm, i) => `<span><b>${nm}</b><span class="v" id="lv${i}">–</span></span>`).join('');
+const isCal = i => cfg.tofCal[i]?.pts?.some(Boolean);
+function applyTofCal() { tof.mm = tof.raw.map((r, i) => r < 0 ? -1 : cfg.tofApply && isCal(i) ? Math.round(cfg.tofCal[i].gain * r + cfg.tofCal[i].off) : r); }
+function onTof(raw) {
+  const now = performance.now();
+  tof.raw = raw; applyTofCal();
+  raw.forEach((r, i) => { if (r >= 0) tof.hist[i].push([now, r]); tof.hist[i] = tof.hist[i].filter(q => now - q[0] < 1000); });
+  if (calRun) calTick(now);
+  tof.mm.forEach((mm, i) => {
+    const ok = tof.st[i]?.ok, w = ok && mm >= 0 ? Math.min(100, mm / 500 * 100) + '%' : '0', t = !ok ? '—' : mm < 0 ? 'ngoài tầm' : mm + ' mm';
+    for (const pre of ['t', 'r']) { $(pre + 'b' + i).style.width = w; $(pre + 'b' + i).style.background = tofColor(mm); $(pre + 'v' + i).textContent = t; }
+    const h = tof.hist[i], m = h.reduce((a, q) => a + q[1], 0) / (h.length || 1);
+    const sd = Math.sqrt(h.reduce((a, q) => a + (q[1] - m) ** 2, 0) / (h.length || 1));
+    $('tn' + i).textContent = ok && h.length > 3 ? '±' + sd.toFixed(1) : '';
+    $('lv' + i).textContent = !ok ? '–' : mm < 0 ? '∞' : mm;
+  });
+}
+$('btnTof').onclick = () => { tof.st = [null, null, null, null, null]; drawTofChips(); send('tof init'); toast('Đang bật lần lượt 5 ToF…'); };
+
+/* hiệu chuẩn: mm_thật = gain * mm_đo + off */
+let calRun = null;
+$('calSensor').innerHTML = TOF.map((nm, i) => `<option value="${i}">${nm}</option>`).join('');
+function fitCal(c) {
+  const p = c.pts.filter(Boolean);
+  if (p.length === 1) { c.gain = 1; c.off = p[0].d - p[0].raw; }
+  else if (p.length >= 2 && p[1].raw !== p[0].raw) { c.gain = (p[1].d - p[0].d) / (p[1].raw - p[0].raw); c.off = p[0].d - c.gain * p[0].raw; }
+  else { c.gain = 1; c.off = 0; }
+}
+function drawCalTable() {
+  let h = '<tr><th>Cảm biến</th><th>Mốc 1 (thật → đo)</th><th>Mốc 2</th><th>Bù</th><th>Hệ số</th><th>Đánh giá</th></tr>';
+  cfg.tofCal.forEach((c, i) => {
+    const pt = k => c.pts[k] ? `${c.pts[k].d} → ${c.pts[k].raw.toFixed(1)} <span class="hint">±${c.pts[k].sd.toFixed(1)}</span>` : '—';
+    const has = isCal(i), big = Math.abs(c.off) > 30 || Math.abs(c.gain - 1) > 0.1;
+    h += `<tr><td><b>${TOF[i]}</b></td><td>${pt(0)}</td><td>${pt(1)}</td><td>${has ? f1(c.off) + ' mm' : '—'}</td><td>${has ? c.gain.toFixed(3) : '—'}</td>
+      <td>${!has ? '<span class="hint">chưa đo</span>' : big ? '<span class="chip warn">lệch lớn: kiểm tra film, góc gắn</span>' : '<span class="chip ok">bình thường</span>'}</td></tr>`;
+  });
+  $('calTable').innerHTML = h;
+}
+function startCal(slot) {
+  const i = +$('calSensor').value, d = +$('calD').value;
+  if (!tof.st[i]?.ok) { $('calStatus').textContent = 'Cảm biến chưa chạy: khởi động ToF trước.'; return; }
+  if (!(d > 0)) return;
+  calRun = { i, slot, d, samples: [], until: performance.now() + 2000 };
+  $('calStatus').textContent = `Đang đo ${TOF[i]} ở ${d} mm… giữ yên tấm bìa`;
+}
+function calTick(now) {
+  const r = tof.raw[calRun.i];
+  if (r >= 0) calRun.samples.push(r);
+  if (now < calRun.until) return;
+  const { i, slot, d, samples } = calRun; calRun = null;
+  if (samples.length < 10) { $('calStatus').textContent = `${TOF[i]}: quá ít số đo hợp lệ (${samples.length}).`; return; }
+  const m = samples.reduce((a, b) => a + b, 0) / samples.length;
+  const sd = Math.sqrt(samples.reduce((a, b) => a + (b - m) ** 2, 0) / samples.length);
+  cfg.tofCal[i].pts[slot] = { d, raw: m, sd };
+  fitCal(cfg.tofCal[i]); saveCfg(); drawCalTable();
+  $('calStatus').textContent = `${TOF[i]}: thật ${d} mm, đo ${m.toFixed(1)} mm (±${sd.toFixed(1)}) → sai ${f1(m - d)} mm`;
+}
+$('btnCal1').onclick = () => startCal(0);
+$('btnCal2').onclick = () => startCal(1);
+$('btnCalClear').onclick = () => { cfg.tofCal[+$('calSensor').value] = { pts: [], gain: 1, off: 0 }; saveCfg(); drawCalTable(); };
+
+/* ============================================================================================
+ * ③ MPU
+ * ============================================================================================ */
+function onImu(v) {
+  const [yaw, roll, pitch, gz, live, rec, still, bias] = v;
+  Object.assign(mpu, { yaw, roll, pitch, gz, live: live === 1, rec, still: still === 1, bias });
+  mpu.hist.push([performance.now(), yaw]);
+  $('yawTxt').textContent = yaw.toFixed(1) + '°';
+  $('rollTxt').textContent = roll.toFixed(1) + '°';
+  $('pitchTxt').textContent = pitch.toFixed(1) + '°';
+  $('gzTxt').textContent = gz.toFixed(1) + ' °/s';
+  $('homeYaw').textContent = yaw.toFixed(1) + '°';
+  $('lvYaw').textContent = yaw.toFixed(1) + '°';
+  setChip('stillChip', mpu.still ? 'ok' : '', (mpu.still ? 'Đứng yên: đang tự bù trôi' : 'Đang chuyển động') + ` · bias ${bias.toFixed(3)}°/s`);
+  if (!mpu.live) setChip('mpuChip', 'bad', 'MPU mất tín hiệu: kiểm tra I2C2 (PB10/PB3)');
+  else if (rec) setChip('mpuChip', 'warn', `MPU đang gửi dữ liệu · đã tự gỡ treo bus ${rec} lần`);
+  else updMpuChips(true);
+}
+function updMpuChips(liveOnly) {
+  if (mpu.ok) setChip('mpuChip', 'ok', `MPU OK · 0x68 · WHO_AM_I 0x${mpu.who}${mpu.who !== '68' ? ' (bản clone)' : ''}`);
+  else setChip('mpuChip', mpu.who === '00' ? 'bad' : '', mpu.who === '00' ? 'MPU không trả lời' : 'MPU: chưa kết nối');
+  if (liveOnly) return;
+  if (mpu.cal) setChip('calChip', mpu.noise < 0.2 ? 'ok' : 'warn', `Đã hiệu chuẩn · nhiễu ${mpu.noise.toFixed(3)}°/s` + (mpu.noise < 0.2 ? '' : ' (xe bị rung? làm lại)'));
+  else setChip('calChip', '', 'Chưa hiệu chuẩn');
+  updBadges();
+}
+$('btnMpu').onclick = () => send('mpu init');
+$('btnCal').onclick = () => { setChip('calChip', 'warn', 'Đang hiệu chuẩn… giữ yên xe!'); send('mpu cal'); };
+$('btnZero').onclick = () => { send('mpu zero'); mpu.hist = []; };
+
+let scaleRun = false;
+const showScale = () => $('scaleChip').textContent = 'Hệ số: ' + (+cfg.gscale).toFixed(4);
+$('btnScaleStart').onclick = () => {
+  send('mpu on'); send('mpu zero'); mpu.hist = []; scaleRun = true;
+  $('scaleResult').innerHTML = `<div class="result">Đang đo… xoay đúng ${cfg.scaleN} vòng rồi đặt lại hướng cũ, bấm Xong.</div>`;
+};
+$('btnScaleDone').onclick = () => {
+  if (!scaleRun) return;
+  scaleRun = false;
+  const want = 360 * cfg.scaleN, got = Math.abs(mpu.yaw);
+  if (got < 90) { $('scaleResult').innerHTML = '<div class="result warn">Yaw thay đổi quá ít. Đã kết nối MPU chưa?</div>'; return; }
+  const old = +cfg.gscale, nw = old * want / got;
+  setCfg('gscale', nw); showScale(); send('mpu scale ' + nw.toFixed(5));
+  $('scaleResult').innerHTML = `<div class="result ok">Thực tế ${want}°, MPU đo ${got.toFixed(1)}° → sai ${f1(got - want)}° (${((got - want) / want * 100).toFixed(2)} %).
+    Hệ số mới <b>${nw.toFixed(4)}</b> (cũ ${old.toFixed(4)}). Yaw lần này ${mpu.yaw > 0 ? 'dương' : 'âm'}: xoay ngược chiều kim đồng hồ phải cho yaw dương.</div>`;
+};
+$('btnScaleReset').onclick = () => { setCfg('gscale', 1); showScale(); send('mpu scale 1'); };
+
+/* ============================================================================================
+ * ④ Động cơ & encoder
+ * ============================================================================================ */
+let held = null, driveTimer = null;
+function driveVals(dir) {
+  const v = +cfg.drive.pwm;
+  return { fwd: [v, v], back: [-v, -v], left: [-v, v], right: [v, -v], onlyL: [v, 0], onlyR: [0, v] }[dir] || [0, 0];
+}
+function startDrive(dir) {
+  if (!link.connected || held === dir) return;
+  held = dir;
+  $$('.hold').forEach(b => b.classList.toggle('held', b.dataset.dir === dir));
+  const tick = () => { const [l, r] = driveVals(held); send(`m ${l} ${r}`); };
+  tick(); clearInterval(driveTimer); driveTimer = setInterval(tick, 150);
+}
+function stopDrive(silent) {
+  if (!held) return;
+  held = null; clearInterval(driveTimer);
+  $$('.hold').forEach(b => b.classList.remove('held'));
+  if (!silent) send('stop');
+}
+$$('.hold').forEach(b => {
+  b.addEventListener('pointerdown', e => { b.setPointerCapture(e.pointerId); startDrive(b.dataset.dir); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => b.addEventListener(ev, () => stopDrive()));
+});
+const KEYS = { ArrowUp: 'fwd', w: 'fwd', ArrowDown: 'back', s: 'back', ArrowLeft: 'left', a: 'left', ArrowRight: 'right', d: 'right' };
+addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' && !['range', 'checkbox'].includes(e.target.type) || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === ' ') { e.preventDefault(); stopAll(); return; }
+  const d = KEYS[e.key];
+  if (d && page === 'motor') { e.preventDefault(); startDrive(d); }
+});
+addEventListener('keyup', e => { if (KEYS[e.key] === held) stopDrive(); });
+addEventListener('blur', () => stopDrive());
+function stopAll() {
+  stopDrive(true); velStop(true); rotAbort();
+  if (run.active) { run.active = false; showRunResult('Đã dừng giữa chừng.', ''); }
+  send('stop'); ui();
+}
+$('btnStop').onclick = stopAll;
+
+const encVal = i => enc.c[i] - enc.zero[i];
+function updEnc() {
+  const C = +cfg.circ, k = mmpc();
+  ['L', 'R'].forEach((s, i) => {
+    const sp = enc.spd[i];
+    $('enc' + s + 'Txt').textContent = encVal(i).toLocaleString('vi');
+    $('dist' + s + 'Txt').textContent = (encVal(i) * k).toFixed(1);
+    $('spd' + s + 'Txt').textContent = `${Math.round(sp)} xung/s · ${(sp / cpr() * 60).toFixed(0)} vòng/phút · ${(sp * k).toFixed(0)} mm/s`;
+    $('spd' + s + 'Bar').style.width = Math.min(100, Math.abs(sp) / (cpr() * 6) * 100) + '%';
+    $('spd' + s + 'Bar').style.background = sp < 0 ? '#f59e0b' : '#2563eb';
+    $('homeEnc' + s).textContent = enc.c[i].toLocaleString('vi');
+    $('homeSpd' + s).textContent = `${(sp * k).toFixed(0)} mm/s`;
+  });
+  $('lvEnc').textContent = `${enc.c[0]} / ${enc.c[1]}`;
+}
+$('btnEncZero').onclick = () => { enc.zero = [...enc.c]; updEnc(); };
+$('btnCprCalc').onclick = () => {
+  const n = +cfg.enc.turns; if (!(n > 0)) return;
+  const cl = Math.abs(encVal(0)) / n, cr = Math.abs(encVal(1)) / n, avg = (cl + cr) / 2;
+  const diff = Math.abs(cl - cr) / Math.max(avg, 1) * 100;
+  $('cprResult').innerHTML = `<div class="result ${diff > 3 ? 'warn' : 'ok'}">Trái <b>${cl.toFixed(1)}</b> · phải <b>${cr.toFixed(1)}</b> xung/vòng<br>
+    Trung bình <b>${avg.toFixed(1)}</b> ${diff > 3 ? `· lệch ${diff.toFixed(1)} %: quay lại cho đúng số vòng?` : '✓'}
+    <div class="row"><button id="btnUseCpr">Dùng ${Math.round(avg)}</button></div></div>`;
+  $('btnUseCpr').onclick = () => { setCfg('cpr', Math.round(avg)); toast('Đã cập nhật số xung/vòng', 'ok'); };
+};
+
+/* B. chạy kín vòng N vòng */
+let mvRes = [null, null], mvTarget = 0, mvHist = [];
+$$('.mvb').forEach(b => b.onclick = () => {
+  const c = Math.round(+cfg.enc.n * cpr()), v = Math.round(+cfg.enc.vrev * cpr()), a = Math.round(+cfg.enc.arev * cpr());
+  const m = { L: [c, 0], R: [0, c], B: [c, c], back: [-c, -c] }[b.dataset.mv];
+  mvRes = [m[0] ? 'run' : null, m[1] ? 'run' : null]; mvTarget = c; mvHist = [];
+  drawMvRes();
+  send(`mv ${m[0]} ${m[1]} ${v} ${a}`);
+});
+function onMvd(side, err, max, ms, timeout) { mvRes[side] = { err, max, ms, timeout }; drawMvRes(); }
+function drawMvRes() {
+  const k = mmpc();
+  const row = (s, name) => {
+    const r = mvRes[s]; if (!r) return '';
+    if (r === 'run') return `<li>${name}: đang chạy…</li>`;
+    if (r.timeout) return `<li>${name}: ⚠ hết giờ (sai ${r.err.toFixed(0)} xung)</li>`;
+    return `<li>${name}: sai cuối <b>${r.err.toFixed(0)} xung</b> (${(r.err / cpr() * 360).toFixed(1)}°, ${(r.err * k).toFixed(2)} mm) ${Math.abs(r.err) <= 10 ? '✓' : '⚠'} · max ${r.max.toFixed(0)} · ${(r.ms / 1000).toFixed(2)} s</li>`;
+  };
+  $('mvResult').innerHTML = `<div class="result"><ul style="margin:0;padding-left:18px">${row(0, 'Trái')}${row(1, 'Phải')}</ul></div>`;
+}
+/* C. chạy hở 1 vòng */
+let goRes = [null, null], goMode = 0;
+$$('.gob').forEach(b => b.onclick = () => {
+  goMode = +b.dataset.go; goRes = [null, null];
+  $('goResult').innerHTML = '<div class="result">Đang chạy…</div>';
+  send(`go ${goMode} ${cpr()} ${Math.abs(+cfg.enc.goPwm)}`);
+});
+function onGod(side, got, ms, timeout) {
+  goRes[side] = { got: Math.abs(got), ms, timeout };
+  const want = cpr();
+  const row = s => {
+    const r = goRes[s], name = s ? 'Phải' : 'Trái';
+    if (!r) return `<li>${name}: đang chạy…</li>`;
+    if (r.timeout) return `<li>${name}: ⚠ hết giờ, chỉ đếm được ${r.got} xung. Encoder có đếm không?</li>`;
+    const over = r.got - want;
+    return `<li>${name}: ${r.got} xung, vượt <b>${over}</b> (${(over / want * 360).toFixed(1)}°) · ${(r.ms / 1000).toFixed(2)} s</li>`;
+  };
+  $('goResult').innerHTML = `<div class="result"><ul style="margin:0;padding-left:18px">${(goMode === 2 ? [0, 1] : [goMode]).map(row).join('')}</ul></div>`;
+}
+const updCprTheory = () => { $('cprTheory').textContent = Math.round(4 * cfg.enc.ppr * cfg.enc.gear); $('cprUseTxt').textContent = cfg.cpr; };
+
+/* ============================================================================================
+ * ⑤ PID: đặc tính động cơ, chạy vòng kín, test bậc thang
+ * ============================================================================================ */
+let ident = { dead: null, pts: [] };
+const showFf = () => {
+  const f = cfg.ff;
+  $('ffChip').className = 'chip ' + (f ? (f.length > 4 ? 'ok' : 'warn') : '');
+  $('ffChip').textContent = f ? `Trái ${(+f[0]).toFixed(1)}% + v/${(+f[1]).toFixed(0)} · phải ${(+f[2]).toFixed(1)}% + v/${(+f[3]).toFixed(0)}` +
+    (f.length > 4 ? ` · khởi động ${(+f[4]).toFixed(0)}/${(+f[5]).toFixed(0)}%` : ' · thiếu mức khởi động') : 'Chưa đo: firmware dùng mặc định';
+};
+function drawIdent() {
+  let h = ident.dead ? `<p>PWM bắt đầu quay: trái <b>${ident.dead[0]}%</b>, phải <b>${ident.dead[1]}%</b></p>` : '<p class="hint">Đang tìm PWM bắt đầu quay…</p>';
+  if (ident.pts.length) h += '<table><tr><th>PWM</th><th>Trái (xung/s)</th><th>Phải (xung/s)</th><th>Chênh</th></tr>' +
+    ident.pts.map(([pw, l, r]) => `<tr><td>${pw}%</td><td>${l.toFixed(0)}</td><td>${r.toFixed(0)}</td><td>${((l - r) / Math.max(1, (l + r) / 2) * 100).toFixed(1)}%</td></tr>`).join('') + '</table>';
+  $('identOut').innerHTML = h;
+}
+function fitIdent() {
+  const fit1 = j => { // xung/s = kv * (pwm - dead), bình phương tối thiểu
+    const q = ident.pts.filter(r => r[j] > 50), n = q.length; if (n < 2) return null;
+    const mx = q.reduce((a, r) => a + r[0], 0) / n, my = q.reduce((a, r) => a + r[j], 0) / n;
+    const kv = q.reduce((a, r) => a + (r[0] - mx) * (r[j] - my), 0) / q.reduce((a, r) => a + (r[0] - mx) ** 2, 0);
+    return [Math.max(0, mx - my / kv), kv];
+  };
+  const a = fit1(1), b = fit1(2);
+  if (!a || !b) { $('identOut').innerHTML += '<div class="result warn">Không đủ dữ liệu. Encoder có đếm không?</div>'; return; }
+  const stat = j => Math.max(ident.dead?.[j] || 0, (j ? b : a)[0] + 1);
+  setCfg('ff', [a[0], a[1], b[0], b[1], stat(0), stat(1)]);
+  showFf(); sendParams();
+  const vmax = Math.min(a[1] * (100 - a[0]), b[1] * (100 - b[0])) * mmpc();
+  $('identOut').innerHTML += `<div class="result ok">Đã gửi lên xe. Tốc độ tối đa ước tính ~<b>${vmax.toFixed(0)} mm/s</b>; nên chạy không quá ~${(vmax * 0.7).toFixed(0)} mm/s để PID còn dư địa.</div>`;
+  updBadges();
+}
+$('btnIdent').onclick = () => { ident = { dead: null, pts: [] }; drawIdent(); send('ident'); };
+
+/* chạy liên tục vòng kín. velHist: [t, vrefL, vL, uL, eL, vrefR, vR, uR, eR] */
+let velHist = [];
+const vel = { running: false, timer: null, stair: false, stairRev: 0 };
+const updVelTxt = () => { const r = +cfg.vel.rev; $('velTxt').textContent = `${r.toFixed(1)} vòng/s · ${(r * cfg.circ / 1000).toFixed(2)} m/s`; };
+function velSend(rev) {
+  const v = Math.round(rev * cpr());
+  const [l, r] = { fwd: [v, v], back: [-v, -v], spin: [v, -v] }[cfg.vel.mode];
+  send(`vel ${l} ${r} ${Math.round(+cfg.vel.acc * cpr())}`);
+}
+function velStart() {
+  if (!link.connected) return;
+  vel.running = true; velHist = [];
+  $('btnVel').textContent = '■ Dừng'; $('btnVel').className = 'danger';
+  velSend(vel.stair ? vel.stairRev : +cfg.vel.rev);
+  clearInterval(vel.timer);
+  vel.timer = setInterval(() => velSend(vel.stair ? vel.stairRev : +cfg.vel.rev), 200);
+}
+function velStop(silent) {
+  clearInterval(vel.timer); vel.timer = null;
+  if (vel.running && !silent) send(`vel 0 0 ${Math.round(+cfg.vel.acc * cpr())}`);
+  vel.running = false; vel.stair = false;
+  $('btnVel').textContent = '▶ Chạy'; $('btnVel').className = 'primary';
+  $('btnStair').textContent = '▶ Chạy test';
+}
+$('btnVel').onclick = () => vel.running ? velStop() : velStart();
+function velStats(rows, k) {
+  const o = 1 + 4 * k;
+  const st = rows.filter(r => Math.abs(r[o]) > 1);
+  if (st.length < 5) return null;
+  const vref = st[st.length - 1][o];
+  const flat = st.filter(r => Math.abs(r[o] - vref) < Math.abs(vref) * 0.01 + 1);
+  if (flat.length < 5) return null;
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const vs = flat.map(r => r[o + 1]), m = mean(vs), sd = Math.sqrt(mean(vs.map(v => (v - m) ** 2)));
+  return { vref, v: m, errPct: (m - vref) / Math.abs(vref) * 100, ripPct: sd / Math.abs(vref) * 100,
+           u: mean(flat.map(r => r[o + 2])), umax: Math.max(...flat.map(r => Math.abs(r[o + 2]))), emax: Math.max(...flat.map(r => Math.abs(r[o + 3]))) };
+}
+function judge(st) {
+  if (!st) return ['', 'đang tăng tốc…'];
+  const why = [];
+  if (st.umax >= 98) why.push('PWM chạm 100 %');
+  if (Math.abs(st.errPct) > 3) why.push(`sai tốc độ ${st.errPct.toFixed(1)} %`);
+  if (st.ripPct > 6) why.push(`dao động ±${st.ripPct.toFixed(1)} %`);
+  if (st.emax > 60) why.push(`lệch vị trí ${st.emax.toFixed(0)} xung`);
+  return why.length ? ['⚠', why.join(', ')] : ['✓', 'ổn định'];
+}
+setInterval(() => {
+  const now = performance.now();
+  velHist = velHist.filter(r => now - r[0] < 10000);
+  if (page !== 'pid') return;
+  const recent = velHist.filter(r => now - r[0] < 1500);
+  [0, 1].forEach(k => {
+    const st = velStats(recent, k), [ic, msg] = judge(st);
+    $(k ? 'velStatR' : 'velStatL').innerHTML = !st ? (vel.running ? 'đang tăng tốc…' : '–') :
+      `${ic} <b>${(st.v / cpr()).toFixed(2)}</b> / ${(st.vref / cpr()).toFixed(2)} vòng/s (${(st.v * mmpc()).toFixed(0)} mm/s) · sai ${f1(st.errPct)} % · dao động ±${st.ripPct.toFixed(1)} % · PWM ${st.u.toFixed(0)}% (max ${st.umax.toFixed(0)}) · <span class="hint">${msg}</span>`;
+  });
+}, 250);
+$('btnStair').onclick = async () => {
+  if (vel.stair) { velStop(); return; }
+  const a = +cfg.vel.a, b = +cfg.vel.b, step = +cfg.vel.step, dur = +cfg.vel.dur * 1000;
+  if (!(step > 0 && b >= a && dur >= 1000)) return;
+  const levels = []; for (let r = a; r <= b + 1e-9; r += step) levels.push(+r.toFixed(2));
+  const res = [];
+  vel.stair = true; vel.stairRev = levels[0];
+  $('btnStair').textContent = '■ Dừng test';
+  velStart();
+  const render = cur => {
+    const f = (x, key, d = 1) => x ? x[key].toFixed(d) : '–';
+    let h = '<table><tr><th>Mức</th><th>Sai T / P</th><th>Dao động T / P</th><th>PWM max T / P</th><th>Lệch vị trí T / P</th><th>Đánh giá</th></tr>';
+    for (const r of res) {
+      const [iL, mL] = judge(r.L), [iR, mR] = judge(r.R);
+      h += `<tr class="num"><td><b>${r.rev} vòng/s</b> <span class="hint">${(r.rev * cfg.circ / 1000).toFixed(2)} m/s</span></td><td>${f(r.L, 'errPct')} / ${f(r.R, 'errPct')} %</td>
+        <td>±${f(r.L, 'ripPct')} / ±${f(r.R, 'ripPct')} %</td><td>${f(r.L, 'umax', 0)} / ${f(r.R, 'umax', 0)} %</td><td>${f(r.L, 'emax', 0)} / ${f(r.R, 'emax', 0)}</td>
+        <td>${iL === '✓' && iR === '✓' ? '<span class="chip ok">ổn định</span>' : `<span class="chip warn">${[iL !== '✓' ? 'T: ' + mL : '', iR !== '✓' ? 'P: ' + mR : ''].filter(Boolean).join(' · ')}</span>`}</td></tr>`;
+    }
+    if (cur !== undefined) h += `<tr><td colspan="6" class="hint">Đang chạy ${cur} vòng/s…</td></tr>`;
+    h += '</table>';
+    const okRevs = res.filter(r => judge(r.L)[0] === '✓' && judge(r.R)[0] === '✓').map(r => r.rev);
+    if (cur === undefined && res.length) h += okRevs.length
+      ? `<div class="result ok">Tốc độ cao nhất PID còn ổn định: <b>${Math.max(...okRevs)} vòng/s ≈ ${(Math.max(...okRevs) * cfg.circ / 1000).toFixed(2)} m/s</b>. Khi thi nên dùng tối đa ~80 % mức này.</div>`
+      : '<div class="result warn">Không mức nào đạt. Đo lại đặc tính động cơ hoặc chỉnh PID.</div>';
+    $('stairOut').innerHTML = h;
+  };
+  for (const rev of levels) {
+    if (!vel.stair) break;
+    vel.stairRev = rev; velSend(rev); render(rev);
+    const t0 = performance.now();
+    await sleep(dur);
+    if (!vel.stair) break;
+    const rows = velHist.filter(r => r[0] > t0 + dur / 2);
+    res.push({ rev, L: velStats(rows, 0), R: velStats(rows, 1) });
+  }
+  velStop();
+  render();
+};
+
+/* ============================================================================================
+ * ⑥ Chạy thẳng
+ * ============================================================================================ */
+const run = { active: false, samples: [], P: null, lat: 0, lastS: 0, path: [] };
+let lastRunCls = '';
+function preCheck() {
+  const w = [];
+  if (link.connected && cfg.st.gyro && !mpu.ok) w.push('MPU chưa kết nối: xe chạy không giữ hướng');
+  else if (link.connected && cfg.st.gyro && !mpu.cal) w.push('MPU chưa hiệu chuẩn');
+  if (link.connected && !tof.started) w.push('ToF chưa bật (không bắt buộc)');
+  $('preCheck').textContent = w.length ? '⚠ ' + w.join(' · ') : '';
+}
+$$('#stPresets a').forEach(a => a.onclick = e => { e.preventDefault(); setCfg('st.dist', +a.dataset.d); });
+$('btnRun').onclick = () => {
+  if (run.active) { stopAll(); return; }
+  if (!link.connected) return;
+  const k = 1 / mmpc(), s = cfg.st;
+  const P = { dist: +s.dist, vel: +s.vel, acc: +s.acc, yaw: +s.yaw, gyro: s.gyro && mpu.ok, kh: +s.kh, kg: +s.kg, kc: +s.kc, t0: performance.now() };
+  if (!(P.dist > 0 && P.vel > 0 && P.acc > 0)) return;
+  Object.assign(run, { active: true, samples: [], P, lat: 0, lastS: 0, path: [[0, 0]] });
+  showRunResult('Đang chạy…', '');
+  sendParams();
+  send(`st ${Math.round(P.dist * k)} ${Math.round(P.vel * k)} ${Math.round(P.acc * k)} ${P.gyro ? P.kh : 0} ${P.gyro ? P.kg : 0} ${P.yaw} ${P.kc}`);
+  ui();
+};
+function showRunResult(html, cls) { $('runResult').className = cls ? 'result ' + cls : 'hint'; $('runResult').innerHTML = html; }
+/* STT: s_ref, dL, dR, yawErr, dv, uL, uR, vref, eL, eR (xung, độ) */
+function onStt(v) {
+  if (!run.active) return;
+  const k = mmpc(), [, dL, dR, yerr, , uL, uR, vref, eL = 0, eR = 0] = v;
+  const s = (dL + dR) / 2 * k, head = run.P.yaw - yerr; // hướng so với lúc xuất phát (dương = lệch trái)
+  run.lat += (s - run.lastS) * Math.sin(head * Math.PI / 180); run.lastS = s;
+  run.path.push([s, run.lat]);
+  const vmeas = (enc.spd[0] + enc.spd[1]) / 2 * k;
+  run.samples.push({ t: (performance.now() - run.P.t0) / 1000, s, head, uL, uR, vref: vref * k, vmeas, lat: run.lat, eL, eR });
+  $('sDist').textContent = `${s.toFixed(0)} / ${run.P.dist}`;
+  $('sDistBar').style.width = Math.min(100, s / run.P.dist * 100) + '%';
+  $('sVel').textContent = `${vmeas.toFixed(0)} mm/s`;
+  $('sYaw').textContent = `${(-yerr).toFixed(2)}°`;
+  $('sYaw').style.color = Math.abs(yerr) < 1 ? 'var(--ok)' : Math.abs(yerr) < 3 ? 'var(--warn)' : 'var(--bad)';
+  $('sLat').textContent = `${run.lat >= 0 ? '←' : '→'} ${Math.abs(run.lat).toFixed(1)} mm`;
+  $('sLR').textContent = `${(dL * k).toFixed(0)} / ${(dR * k).toFixed(0)} mm`;
+  $('sPwm').textContent = `${uL.toFixed(0)} / ${uR.toFixed(0)} %`;
+  const mx = j => Math.max(...run.samples.map(q => Math.abs(q[j])));
+  $('encErrTxt').textContent = `Sai lệch encoder hiện tại ${eL.toFixed(0)} / ${eR.toFixed(0)} xung · lớn nhất ${mx('eL').toFixed(0)} / ${mx('eR').toFixed(0)} xung (${(Math.max(mx('eL'), mx('eR')) * k).toFixed(1)} mm)`;
+}
+const runHist = JSON.parse(localStorage.getItem('mm_runhist2') || '[]');
+/* STD: dL, dR, yawErrFinal, maxYawErr, ms, gyro */
+function onStd(v) {
+  const k = mmpc(), [dL, dR, yf, ymax, ms, gyro] = v, P = run.P;
+  run.active = false; ui();
+  if (!P) return;
+  const sL = dL * k, sR = dR * k, s = (sL + sR) / 2, err = s - P.dist;
+  const sat = run.samples.some(q => Math.abs(q.uL) >= 98 || Math.abs(q.uR) >= 98);
+  const emax = run.samples.length ? Math.max(...run.samples.map(q => Math.max(Math.abs(q.eL), Math.abs(q.eR)))) : 0;
+  const bad = [];
+  if (Math.abs(err) > 5) bad.push(`sai quãng đường ${f1(err)} mm`);
+  if (gyro && Math.abs(yf) > 2) bad.push(`lệch hướng cuối ${(-yf).toFixed(1)}°`);
+  if (Math.abs(run.lat) > 10) bad.push(`lệch ngang ${Math.abs(run.lat).toFixed(0)} mm`);
+  if (sat) bad.push('PWM chạm 100 %: giảm vận tốc');
+  if (emax > 40) bad.push(`PID encoder bám kém (${emax.toFixed(0)} xung)`);
+  lastRunCls = bad.length ? 'warn' : 'ok';
+  runHist.unshift({ time: new Date().toLocaleTimeString('vi'), dist: P.dist, vel: P.vel, gyro, kh: P.kh, kg: P.kg, s, yf: -yf, ymax, lat: run.lat, emax });
+  runHist.length = Math.min(runHist.length, 20); drawRunHist();
+  showRunResult(`<b>${bad.length ? '⚠ ' + bad.join(' · ') : '✓ Xe chạy thẳng, dừng đúng đích'}</b><br>
+    Encoder: <b>${s.toFixed(1)} mm</b> / đặt ${P.dist} (trái ${sL.toFixed(1)}, phải ${sR.toFixed(1)}) · hướng cuối <b>${(-yf).toFixed(2)}°</b>, lệch lớn nhất ${ymax.toFixed(2)}° ${gyro ? '' : '(không dùng MPU)'} ·
+    lệch ngang ~<b>${Math.abs(run.lat).toFixed(1)} mm</b> · encoder lệch tối đa ${emax.toFixed(0)} xung · ${(ms / 1000).toFixed(2)} s, TB ${(s / (ms / 1000)).toFixed(0)} mm/s
+    <div class="row">Đo thực tế bằng thước: <input type="number" id="realDist" placeholder="mm"> mm <button id="btnReal">Tính lại chu vi bánh</button><span id="realOut"></span></div>`, lastRunCls);
+  $('btnReal').onclick = () => {
+    const real = +$('realDist').value; if (!(real > 0)) return;
+    const c = +cfg.circ * real / s;
+    $('realOut').innerHTML = ` → chu vi đúng ≈ <b>${c.toFixed(2)} mm</b> <button id="btnUseC">Dùng</button>`;
+    $('btnUseC').onclick = () => { setCfg('circ', +c.toFixed(2)); toast('Đã cập nhật chu vi bánh', 'ok'); };
+  };
+  updBadges();
+}
+function drawRunHist() {
+  localStorage.setItem('mm_runhist2', JSON.stringify(runHist));
+  $('histTable').innerHTML = '<tr><th>Giờ</th><th>Đặt</th><th>Vận tốc</th><th>MPU (Kh/Kg)</th><th>Encoder</th><th>Hướng cuối</th><th>Lệch max</th><th>Lệch ngang</th><th>Encoder max</th></tr>' +
+    runHist.map(r => `<tr class="num"><td>${r.time}</td><td>${r.dist}</td><td>${r.vel}</td><td>${r.gyro ? `${r.kh}/${r.kg}` : 'tắt'}</td><td>${r.s.toFixed(1)}</td><td>${r.yf.toFixed(2)}°</td><td>${r.ymax.toFixed(2)}°</td><td>${Math.abs(r.lat).toFixed(1)}</td><td>${(r.emax ?? 0).toFixed(0)}</td></tr>`).join('');
+}
+
+/* ============================================================================================
+ * ⑦ Quay tại chỗ
+ * ============================================================================================ */
+const rot = { active: false, P: null, samples: [], resolve: null, seq: null };
+let lastRotCls = '';
+function startRot(deg) {
+  if (!link.connected || rot.active || run.active) return Promise.resolve(null);
+  const r = cfg.rot, gyro = r.gyro && mpu.ok;
+  rot.P = { deg, gyro, wmax: +r.wmax, alpha: +r.alpha, track: +cfg.track, kt: +r.kt, ktd: +r.ktd, t0: performance.now(), yaw0: mpu.yaw };
+  rot.samples = []; rot.active = true; ui();
+  sendParams();
+  send(`rot ${deg} ${rot.P.wmax} ${rot.P.alpha} ${gyro ? rot.P.kt : 0} ${gyro ? rot.P.ktd : 0} ${cpd().toFixed(4)}`);
+  return new Promise(res => rot.resolve = res);
+}
+function rotAbort() { if (!rot.active && !rot.seq) return; rot.active = false; rot.seq = null; rot.resolve?.(null); rot.resolve = null; ui(); }
+/* RTT: thRef, th, gz, dw, dL, dR, uL, uR, eL, eR */
+function onRtt(v) {
+  if (!rot.active) return;
+  const [thr, th, gz, dw, dL, dR, uL, uR, eL, eR] = v;
+  rot.samples.push({ t: (performance.now() - rot.P.t0) / 1000, thr, th, gz, dw, uL, uR, eL, eR });
+  const e = thr - th;
+  $('rRef').textContent = thr.toFixed(1) + '°';
+  $('rMeas').textContent = th.toFixed(1) + '°';
+  $('rErr').textContent = e.toFixed(2) + '°';
+  $('rErr').style.color = Math.abs(e) < 1 ? 'var(--ok)' : Math.abs(e) < 3 ? 'var(--warn)' : 'var(--bad)';
+  $('rGz').textContent = gz.toFixed(0) + ' °/s';
+  $('rEnc').textContent = `${dL} / ${dR} xung · sai ${eL.toFixed(0)} / ${eR.toFixed(0)}`;
+  $('rPwm').textContent = `${uL.toFixed(0)} / ${uR.toFixed(0)} % · dω ${dw.toFixed(1)}°/s`;
+}
+const rotHist = JSON.parse(localStorage.getItem('mm_rothist2') || '[]');
+/* RTD: errFinal, th, dL, dR, ms, gyro, settleMs */
+function onRtd(v) {
+  const [ef, th, dL, dR, ms, gyro, settle] = v, P = rot.P;
+  rot.active = false; ui();
+  if (!P) return;
+  const k = mmpc(), arcL = dL * k, arcR = dR * k;
+  const trackEst = gyro && Math.abs(th) > 30 ? (arcR - arcL) / (th * Math.PI / 180) : null;
+  const emax = Math.max(0, ...rot.samples.map(q => Math.max(Math.abs(q.eL), Math.abs(q.eR))));
+  const over = Math.max(0, ...rot.samples.map(q => P.deg > 0 ? q.th - P.deg : P.deg - q.th));
+  const sat = rot.samples.some(q => Math.abs(q.uL) >= 98 || Math.abs(q.uR) >= 98);
+  const res = { time: new Date().toLocaleTimeString('vi'), deg: P.deg, th, ef, over, ms, settle, gyro, trackEst, after: null };
+  rotHist.unshift(res); rotHist.length = Math.min(rotHist.length, 20);
+  const bad = [];
+  if (Math.abs(ef) > 1) bad.push(`sai ${ef.toFixed(2)}°`);
+  if (over > 3) bad.push(`quay vượt ${over.toFixed(1)}°`);
+  if (sat) bad.push('PWM chạm 100 %: giảm tốc độ quay');
+  if (emax > 60) bad.push(`PID encoder bám kém (${emax.toFixed(0)} xung)`);
+  lastRotCls = bad.length ? 'warn' : 'ok';
+  const html = after => `<b>${bad.length ? '⚠ ' + bad.join(' · ') : '✓ Quay chính xác'}</b><br>
+    Đặt <b>${P.deg}°</b> → MPU đo <b>${th.toFixed(2)}°</b> lúc phanh${after !== null ? `, <b>${after.toFixed(2)}°</b> khi đứng yên hẳn` : ''} ·
+    vượt tối đa ${over.toFixed(1)}° · ${(ms / 1000).toFixed(2)} s (ổn định cuối ${settle} ms) ${gyro ? '' : '· <b>không dùng MPU</b>'}<br>
+    Encoder: trái ${arcL.toFixed(1)} mm, phải ${arcR.toFixed(1)} mm · sai lệch PID tối đa ${emax.toFixed(0)} xung
+    ${trackEst ? `<br>Khoảng cách 2 bánh hiệu dụng (encoder so với MPU): <b>${trackEst.toFixed(1)} mm</b> (đang dùng ${P.track}) ${Math.abs(trackEst - P.track) > 1 ? `<button id="btnUseTrack">Dùng ${trackEst.toFixed(1)} mm</button>` : '✓ khớp'}` : ''}`;
+  const show = after => {
+    $('rotResult').className = 'result ' + lastRotCls; $('rotResult').innerHTML = html(after);
+    const b = $('btnUseTrack'); if (b) b.onclick = () => { setCfg('track', +trackEst.toFixed(1)); b.replaceWith('✓ đã cập nhật'); };
+  };
+  show(null);
+  setTimeout(() => { // đọc lại góc sau khi xe đứng yên hẳn
+    if (mpu.ok) { res.after = mpu.yaw - P.yaw0; show(res.after); }
+    drawRotHist();
+    rot.resolve?.(res); rot.resolve = null;
+  }, 600);
+  updBadges();
+}
+function drawRotHist() {
+  localStorage.setItem('mm_rothist2', JSON.stringify(rotHist));
+  $('rotHist').innerHTML = '<tr><th>Giờ</th><th>Đặt</th><th>Đo khi phanh</th><th>Khi đứng yên</th><th>Vượt</th><th>Thời gian</th><th>MPU</th><th>2 bánh ước tính</th></tr>' +
+    rotHist.map(r => `<tr class="num"><td>${r.time}</td><td>${r.deg}°</td><td>${r.th.toFixed(2)}°</td><td>${r.after != null ? r.after.toFixed(2) + '°' : '–'}</td>
+      <td>${r.over.toFixed(1)}°</td><td>${(r.ms / 1000).toFixed(2)} s</td><td>${r.gyro ? 'có' : 'không'}</td><td>${r.trackEst ? r.trackEst.toFixed(1) + ' mm' : '–'}</td></tr>`).join('');
+}
+$$('.rotb').forEach(b => b.onclick = () => startRot(b.id === 'btnRotC' ? +cfg.rot.ang : +b.dataset.a));
+$$('.seqb').forEach(b => b.onclick = async () => {
+  const seq = b.dataset.s.split(',').map(Number), yawStart = mpu.yaw, results = [];
+  rot.seq = seq;
+  for (const a of seq) {
+    if (rot.seq !== seq) break;
+    const r = await startRot(a);
+    if (!r) break;
+    results.push(r);
+    await sleep(300);
+  }
+  if (rot.seq !== seq) return;
+  rot.seq = null;
+  const want = seq.reduce((x, y) => x + y, 0), got = mpu.yaw - yawStart, drift = got - want;
+  $('rotResult').innerHTML += `<div class="result ${Math.abs(drift) < 2 ? 'ok' : 'warn'}"><b>Test lặp ${seq.length} lần:</b> tổng đặt ${want}°, MPU đo tổng ${got.toFixed(2)}° → <b>lệch tích luỹ ${f1(drift)}°</b>
+    ${Math.abs(drift) < 2 ? '✓ tốt' : '⚠ lớn: hiệu chỉnh hệ số gyro (trang MPU) hoặc tăng Kt'}<br>
+    Từng lần: ${results.map(r => `${r.deg > 0 ? '+' : ''}${r.deg}→${(r.after ?? r.th).toFixed(1)}`).join(' · ')}</div>`;
+});
+
+/* ============================================================================================
+ * ⑧ Thông số & sao lưu
+ * ============================================================================================ */
+function updDerived() {
+  const d = cfg.circ / Math.PI;
+  $('mechDerived').textContent = `→ ${mmpc().toFixed(4)} mm/xung · đường kính bánh ${d.toFixed(2)} mm · quay tại chỗ ${cpd().toFixed(2)} xung/độ`;
+  $('mmpcTxt').textContent = `(${mmpc().toFixed(3)} mm/xung)`;
+  $('trackTxt').textContent = `Khoảng cách 2 bánh đang dùng: ${cfg.track} mm → ${cpd().toFixed(2)} xung/độ`;
+  $('pwmTxt').textContent = cfg.drive.pwm + '%';
+  updCprTheory(); showFf(); showScale(); updVelTxt();
+  if (page === 'settings') drawSettings();
+}
+function drawSettings() {
+  const f = cfg.ff, cal = cfg.tofCal;
+  const rows = [
+    ['Bù trước động cơ', f ? `T ${(+f[0]).toFixed(1)}% + v/${(+f[1]).toFixed(0)} · P ${(+f[2]).toFixed(1)}% + v/${(+f[3]).toFixed(0)}${f.length > 4 ? ` · khởi động ${(+f[4]).toFixed(0)}/${(+f[5]).toFixed(0)}%` : ''}` : '—'],
+    ['PID bánh', `Kp ${cfg.kp} · Ki ${cfg.ki} · Kd ${cfg.kd}`],
+    ['Hệ số gyro', (+cfg.gscale).toFixed(4)],
+    ['ToF đã hiệu chuẩn', cal.map((c, i) => isCal(i) ? `${TOF[i]} ${f1(c.off)} mm` : null).filter(Boolean).join(' · ') || '—'],
+    ['Chạy thẳng', `Kh ${cfg.st.kh} · Kg ${cfg.st.kg} · Kc ${cfg.st.kc}`],
+    ['Quay', `Kt ${cfg.rot.kt} · Ktd ${cfg.rot.ktd} · ${cfg.rot.wmax}°/s`],
+  ];
+  $('calSummary').innerHTML = rows.map(([k, v]) => `<tr><th style="width:38%">${k}</th><td class="num">${v}</td></tr>`).join('');
+  const ff = f || [6, 55, 6, 55, 8, 8], c3 = x => (+x).toFixed(3), arr = a => '{' + a.join(', ') + '}';
+  const cf = x => { const t = String(+x); return (/[.e]/.test(t) ? t : t + '.0') + 'f'; };
+  $('cOut').value =
+`/* Thông số đo bằng tools/hwtest_web – ${new Date().toLocaleString('vi')} */
+#define ENC_CPR_WHEEL ${(+cfg.cpr).toFixed(1)}f
+#define WHEEL_CIRC_MM ${(+cfg.circ).toFixed(2)}f
+#define TRACK_MM      ${(+cfg.track).toFixed(1)}f
+
+/* PID bánh xe (pid_gains) */
+#define PID_KP ${c3(cfg.kp)}f
+#define PID_KI ${c3(cfg.ki)}f
+#define PID_KD ${(+cfg.kd).toFixed(4)}f
+
+/* Bù trước (ff_model): PWM = dead + v / kv; stat = PWM khởi động khi bánh đứng yên */
+#define FF_DEAD_L ${c3(ff[0])}f
+#define FF_KV_L   ${c3(ff[1])}f
+#define FF_DEAD_R ${c3(ff[2])}f
+#define FF_KV_R   ${c3(ff[3])}f
+#define FF_STAT_L ${c3(ff[4] ?? ff[0] * 1.3 + 1)}f
+#define FF_STAT_R ${c3(ff[5] ?? ff[2] * 1.3 + 1)}f
+
+/* MPU */
+#define GYRO_SCALE ${(+cfg.gscale).toFixed(5)}f
+
+/* ToF: mm_thật = gain * mm_đo + off   (L90, L45, M0, R45, R90) */
+#define TOF_GAIN ${arr(cal.map((c, i) => (isCal(i) ? c.gain : 1).toFixed(4) + 'f'))}
+#define TOF_OFF  ${arr(cal.map((c, i) => (isCal(i) ? c.off : 0).toFixed(1) + 'f'))}
+
+/* Chạy thẳng / quay tại chỗ */
+#define ST_KH   ${cf(cfg.st.kh)}
+#define ST_KG   ${cf(cfg.st.kg)}
+#define ST_KC   ${cf(cfg.st.kc)}
+#define ROT_KT  ${cf(cfg.rot.kt)}
+#define ROT_KTD ${cf(cfg.rot.ktd)}
+`;
+}
+$('btnCopyC').onclick = async () => { try { await navigator.clipboard.writeText($('cOut').value); toast('Đã sao chép', 'ok'); } catch { $('cOut').select(); document.execCommand('copy'); toast('Đã sao chép', 'ok'); } };
+$('btnExport').onclick = () => {
+  const data = { version: 1, exported: new Date().toISOString(), cfg, runHist, rotHist };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.download = `micromouse_thong_so_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$('btnImportBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!data.cfg) throw new Error('không phải file thông số');
+    cfg = merge(structuredClone(DEFAULTS), data.cfg);
+    if (!Array.isArray(cfg.tofCal) || cfg.tofCal.length !== 5) cfg.tofCal = TOF.map(() => ({ pts: [], gain: 1, off: 0 }));
+    saveCfg();
+    if (data.runHist) localStorage.setItem('mm_runhist2', JSON.stringify(data.runHist));
+    if (data.rotHist) localStorage.setItem('mm_rothist2', JSON.stringify(data.rotHist));
+    toast('Đã nhập thông số, đang tải lại…', 'ok'); setTimeout(() => location.reload(), 600);
+  } catch (err) { toast('File không hợp lệ: ' + err.message, 'bad'); }
+};
+$('btnReset').onclick = () => {
+  if (!confirm('Đặt lại mọi thông số và xoá kết quả hiệu chuẩn đã lưu trong trình duyệt này?')) return;
+  localStorage.removeItem(CFG_KEY); localStorage.removeItem('mm_runhist2'); localStorage.removeItem('mm_rothist2');
+  ['mm_ff', 'mm_gscale', 'mm_tofcal', 'mm_dash'].forEach(k => localStorage.removeItem(k)); // khoá của bản web cũ
+  location.reload();
+};
+
+/* ============================================================================================
+ * Vẽ
+ * ============================================================================================ */
+function fit(c) {
+  if (!c || !c.clientWidth) return null; // canvas đang ẩn
+  if (!c.dataset.h) c.dataset.h = c.getAttribute('height');
+  const r = devicePixelRatio || 1, w = c.clientWidth, h = +c.dataset.h;
+  if (c.width !== Math.round(w * r) || c.height !== Math.round(h * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); c.style.height = h + 'px'; }
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, w, h); return [g, w, h];
+}
+function drawCar(g, x, y, ang, sc, color) { // ang: rad, 0 = mũi xe hướng sang phải; xe ~100 x 90 mm
+  g.save(); g.translate(x, y); g.rotate(ang);
+  g.fillStyle = color; g.beginPath(); g.roundRect(-50 * sc, -45 * sc, 100 * sc, 90 * sc, 12 * sc); g.fill();
+  g.fillStyle = '#0f172a'; g.fillRect(-25 * sc, -53 * sc, 40 * sc, 9 * sc); g.fillRect(-25 * sc, 44 * sc, 40 * sc, 9 * sc);
+  g.fillStyle = '#fff'; g.beginPath(); g.moveTo(46 * sc, 0); g.lineTo(28 * sc, -11 * sc); g.lineTo(28 * sc, 11 * sc); g.fill();
+  g.restore();
+}
+function drawRays(g, x, y, ang, sc, carSc, mm, maxMm) {
+  TOF_ANG.forEach((a, i) => {
+    if (!tof.st[i]?.ok) return;
+    const t = ang + (-a) * Math.PI / 180, v = mm[i];
+    const len = (v >= 0 ? Math.min(v, maxMm) : maxMm) * sc, sx = x + 42 * carSc * Math.cos(t), sy = y + 42 * carSc * Math.sin(t);
+    g.strokeStyle = tofColor(v); g.lineWidth = 3; g.globalAlpha = .85; g.lineCap = 'round';
+    if (v < 0) g.setLineDash([3, 6]);
+    g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + len * Math.cos(t), sy + len * Math.sin(t)); g.stroke();
+    g.setLineDash([]); g.globalAlpha = 1;
+    if (v >= 0 && v <= maxMm) { g.fillStyle = tofColor(v); g.beginPath(); g.arc(sx + len * Math.cos(t), sy + len * Math.sin(t), 4, 0, 7); g.fill(); }
+  });
+  g.lineWidth = 1;
+}
+function drawTofRadial(id, maxMm, labels = true) {
+  const f = fit($(id)); if (!f) return; const [g, w, h] = f;
+  const cx = w / 2, cy = h - 28, R = Math.min(w / 2 - 46, cy - 44), sc = R / maxMm, carSc = R / 420;
+  g.strokeStyle = '#e2e8f0'; g.fillStyle = '#94a3b8'; g.font = '10px sans-serif'; g.textAlign = 'center';
+  for (let k = 1; k <= 4; k++) { g.beginPath(); g.arc(cx, cy, R * k / 4, Math.PI, 2 * Math.PI); g.stroke(); g.fillText(Math.round(maxMm * k / 4), cx + R * k / 4, cy + 13); }
+  drawRays(g, cx, cy, -Math.PI / 2, sc, carSc, tof.mm, maxMm);
+  drawCar(g, cx, cy, -Math.PI / 2, carSc, '#334155');
+  if (!labels) return;
+  TOF_ANG.forEach((a, i) => {
+    const t = -Math.PI / 2 - a * Math.PI / 180, lx = cx + (R + 24) * Math.cos(t), ly = cy + (R + 24) * Math.sin(t) - 4;
+    const v = tof.mm[i], ok = tof.st[i]?.ok;
+    g.fillStyle = '#0f172a'; g.font = 'bold 11px sans-serif'; g.fillText(TOF[i], lx, ly);
+    g.fillStyle = ok ? tofColor(v) : '#94a3b8'; g.font = '12px ui-monospace, Menlo, monospace';
+    g.fillText(!ok ? '—' : v < 0 ? '∞' : v, lx, ly + 14);
+  });
+}
+function drawCompass(id, yaw) {
+  const f = fit($(id)); if (!f) return; const [g, w, h] = f;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 8;
+  g.strokeStyle = '#cbd5e1'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = '#64748b'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let d = 0; d < 360; d += 30) {
+    const t = (-d - 90) * Math.PI / 180, l = d % 90 ? 5 : 10;
+    g.beginPath(); g.moveTo(cx + R * Math.cos(t), cy + R * Math.sin(t)); g.lineTo(cx + (R - l) * Math.cos(t), cy + (R - l) * Math.sin(t)); g.stroke();
+    if (d % 90 === 0) g.fillText(d > 180 ? d - 360 : d, cx + (R - 20) * Math.cos(t), cy + (R - 20) * Math.sin(t));
+  }
+  g.textBaseline = 'alphabetic';
+  drawCar(g, cx, cy, -Math.PI / 2 - yaw * Math.PI / 180, R / 140, '#2563eb');
+}
+function lineChart(id, title, pts, opts) { // pts: [[x, y1, y2, ...]]
+  const f = fit($(id)); if (!f) return; const [g, w, h] = f;
+  g.font = '11px sans-serif'; g.fillStyle = '#64748b'; g.textAlign = 'left'; g.fillText(title, 38, 11);
+  const S = opts.series;
+  let x0 = opts.x0 ?? Infinity, x1 = opts.x1 ?? -Infinity, lo = opts.min ?? Infinity, hi = opts.max ?? -Infinity;
+  for (const p of pts) {
+    if (opts.x0 === undefined) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); }
+    if (opts.min === undefined) S.forEach((s, j) => { lo = Math.min(lo, p[j + 1]); hi = Math.max(hi, p[j + 1]); });
+  }
+  if (!isFinite(lo) || !isFinite(hi)) { lo = -1; hi = 1; }
+  if (opts.sym) { const m = Math.max(Math.abs(lo), Math.abs(hi), opts.symMin || 1); lo = -m; hi = m; }
+  if (opts.zero) lo = Math.min(lo, 0);
+  if (hi - lo < 1e-6) { hi += 1; lo -= 1; }
+  if (!(x1 > x0)) { x0 = isFinite(x0) ? x0 : 0; x1 = x0 + 1; }
+  const X = x => 38 + (x - x0) / (x1 - x0) * (w - 42), Y = y => h - 16 - (y - lo) / (hi - lo) * (h - 32);
+  g.strokeStyle = '#eef1f5';
+  [lo, (lo + hi) / 2, hi].forEach(v => { g.beginPath(); g.moveTo(38, Y(v)); g.lineTo(w, Y(v)); g.stroke(); g.fillText((opts.fmt || (x => x.toFixed(1)))(v), 0, Y(v) + 3); });
+  if (opts.xlabel) { g.textAlign = 'right'; g.fillText(opts.xlabel, w - 2, h - 3); g.textAlign = 'left'; }
+  S.forEach((s, j) => {
+    g.strokeStyle = s.c; g.lineWidth = 2; g.setLineDash(s.dash ? [5, 4] : []); g.beginPath();
+    pts.forEach((p, i) => i ? g.lineTo(X(p[0]), Y(p[j + 1])) : g.moveTo(X(p[0]), Y(p[j + 1])));
+    g.stroke();
+  });
+  g.setLineDash([]); g.lineWidth = 1;
+  let lx = w - 4; g.textAlign = 'right';
+  for (const s of [...S].reverse()) { g.fillStyle = s.c; g.fillText(s.name, lx, 11); lx -= g.measureText(s.name).width + 12; }
+}
+function drawWheel(id, i) {
+  const f = fit($(id)); if (!f) return; const [g, w, h] = f;
+  const turns = encVal(i) / cpr(), cx = 46, cy = h / 2, R = 38, a = turns * 2 * Math.PI - Math.PI / 2;
+  g.fillStyle = '#1e293b'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.fill();
+  g.fillStyle = '#e2e8f0'; g.beginPath(); g.arc(cx, cy, R - 9, 0, 7); g.fill();
+  g.strokeStyle = '#94a3b8'; g.lineWidth = 2;
+  for (let k = 0; k < 4; k++) { const t = a + k * Math.PI / 2; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + (R - 9) * Math.cos(t), cy + (R - 9) * Math.sin(t)); g.stroke(); }
+  g.fillStyle = '#ef4444'; g.beginPath(); g.arc(cx + (R - 4) * Math.cos(a), cy + (R - 4) * Math.sin(a), 5, 0, 7); g.fill();
+  g.lineWidth = 1; g.fillStyle = '#0f172a'; g.font = '14px sans-serif'; g.textAlign = 'left';
+  g.fillText(`${turns.toFixed(2)} vòng`, 98, cy - 4);
+  g.fillStyle = '#64748b'; g.font = '11px sans-serif'; g.fillText(`theo ${cpr()} xung/vòng`, 98, cy + 13);
+}
+function drawYawChart() {
+  const now = performance.now();
+  mpu.hist = mpu.hist.filter(p => now - p[0] < 10000);
+  lineChart('cvYaw', 'Yaw (°) – 10 giây gần nhất', mpu.hist.map(p => [(p[0] - now) / 1000, p[1]]),
+    { series: [{ c: '#2563eb', name: 'yaw' }], x0: -10, x1: 0, sym: true, symMin: 10, fmt: x => x.toFixed(0) });
+}
+function drawMvChart() {
+  if (!mvHist.length) { const f = fit($('cvMv')); if (f) { f[0].fillStyle = '#94a3b8'; f[0].font = '11px sans-serif'; f[0].fillText('Sai lệch vị trí sẽ hiện ở đây khi chạy', 8, 14); } return; }
+  const t0 = mvHist[0][0];
+  lineChart('cvMv', 'Sai lệch vị trí (xung)', mvHist.map(q => [(q[0] - t0) / 1000, q[1], q[2]]),
+    { series: [{ c: '#2563eb', name: 'trái' }, { c: '#f59e0b', name: 'phải' }], sym: true, symMin: 10, fmt: x => x.toFixed(0), xlabel: 's' });
+}
+function drawVelCharts() {
+  const now = performance.now(), c = cpr(), rows = velHist.map(r => [(r[0] - now) / 1000, ...r.slice(1)]);
+  lineChart('cvVel', 'Tốc độ (vòng/s) – 10 giây', rows.map(r => [r[0], r[1] / c, r[2] / c, r[5] / c, r[6] / c]),
+    { series: [{ c: '#93c5fd', name: 'đặt T', dash: true }, { c: '#2563eb', name: 'trái' }, { c: '#fcd34d', name: 'đặt P', dash: true }, { c: '#f59e0b', name: 'phải' }], x0: -10, x1: 0, zero: true });
+  lineChart('cvVelPwm', 'PWM (%)', rows.map(r => [r[0], r[3], r[7]]), { series: [{ c: '#2563eb', name: 'trái' }, { c: '#f59e0b', name: 'phải' }], x0: -10, x1: 0, min: -100, max: 100, fmt: x => x.toFixed(0) });
+  lineChart('cvVelErr', 'Lệch vị trí (xung)', rows.map(r => [r[0], r[4], r[8]]), { series: [{ c: '#2563eb', name: 'trái' }, { c: '#f59e0b', name: 'phải' }], x0: -10, x1: 0, sym: true, symMin: 10, fmt: x => x.toFixed(0) });
+}
+function drawSim() {
+  const f = fit($('cvSim')); if (!f) return; const [g, w, h] = f;
+  const dist = run.P?.dist || +cfg.st.dist || 200, exag = cfg.st.exag ? 5 : 1;
+  const margin = 64, sc = (w - 2 * margin) / Math.max(dist, 100), cy = h / 2;
+  const X = s => margin + s * sc, Y = lat => cy - lat * sc * exag;
+  const step = dist > 1500 ? 250 : dist > 600 ? 100 : 50;
+  g.strokeStyle = '#e2e8f0'; g.fillStyle = '#94a3b8'; g.font = '10px sans-serif'; g.textAlign = 'center';
+  for (let s = 0; s <= dist + 1; s += step) { g.beginPath(); g.moveTo(X(s), 18); g.lineTo(X(s), h - 18); g.stroke(); if (s % (step * 2) === 0 || dist <= 600) g.fillText(s, X(s), h - 5); }
+  g.strokeStyle = '#16a34a'; g.setLineDash([6, 5]); g.beginPath(); g.moveTo(X(0), cy); g.lineTo(X(dist), cy); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#dc2626'; g.lineWidth = 2; g.beginPath(); g.moveTo(X(dist), 18); g.lineTo(X(dist), h - 18); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = '#dc2626'; g.fillText('ĐÍCH', X(dist), 13); g.fillStyle = '#16a34a'; g.fillText('XUẤT PHÁT', X(0), 13);
+  if (run.path.length > 1) {
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2.5; g.beginPath();
+    run.path.forEach((p, i) => i ? g.lineTo(X(p[0]), Y(p[1])) : g.moveTo(X(p[0]), Y(p[1])));
+    g.stroke(); g.lineWidth = 1;
+  }
+  const last = run.samples[run.samples.length - 1];
+  const s = last ? last.s : 0, lat = last ? last.lat : 0, head = last ? last.head : 0;
+  const ang = -head * Math.PI / 180 * (exag > 1 ? 3 : 1), carSc = Math.min(sc, h * 0.2 / 100);
+  drawRays(g, X(s), Y(lat), ang, carSc, carSc, tof.mm, 350);
+  drawCar(g, X(s), Y(lat), ang, carSc, run.active ? '#2563eb' : '#334155');
+  if (exag > 1) { g.fillStyle = '#94a3b8'; g.textAlign = 'center'; g.fillText('lệch ngang ×5, góc ×3 để dễ thấy', w / 2, 13); }
+}
+function drawRunCharts() {
+  const S = run.samples;
+  lineChart('cvHead', 'Hướng xe (°) theo quãng đường', S.map(q => [q.s, q.head]),
+    { series: [{ c: '#7c3aed', name: 'hướng' }], sym: true, symMin: 2, x0: 0, x1: run.P?.dist || +cfg.st.dist || 200, xlabel: 'mm' });
+  lineChart('cvStVel', 'Tốc độ (mm/s)', S.map(q => [q.t, q.vref, q.vmeas]),
+    { series: [{ c: '#94a3b8', name: 'đặt', dash: true }, { c: '#2563eb', name: 'thực' }], zero: true, fmt: x => x.toFixed(0), xlabel: 's' });
+  lineChart('cvStErr', 'PID encoder: sai lệch vị trí (xung)', S.map(q => [q.t, q.eL, q.eR]),
+    { series: [{ c: '#2563eb', name: 'trái' }, { c: '#f59e0b', name: 'phải' }], sym: true, symMin: 10, fmt: x => x.toFixed(0), xlabel: 's' });
+}
+function drawRot() {
+  const f = fit($('cvRot')); if (!f) return; const [g, w, h] = f;
+  const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 22;
+  const last = rot.samples[rot.samples.length - 1], th = last ? last.th : 0, thr = last ? last.thr : 0, target = rot.P ? rot.P.deg : 0;
+  const A = d => -Math.PI / 2 - d * Math.PI / 180; // 0° = hướng lên, + = ngược chiều kim đồng hồ
+  g.strokeStyle = '#e2e8f0'; g.beginPath(); g.arc(cx, cy, R, 0, 7); g.stroke();
+  g.fillStyle = '#94a3b8'; g.font = '10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let d = -180; d < 180; d += 45) {
+    const t = A(d), l = d % 90 ? 4 : 9;
+    g.beginPath(); g.moveTo(cx + R * Math.cos(t), cy + R * Math.sin(t)); g.lineTo(cx + (R - l) * Math.cos(t), cy + (R - l) * Math.sin(t)); g.stroke();
+    if (d % 90 === 0) g.fillText(d, cx + (R + 12) * Math.cos(t), cy + (R + 12) * Math.sin(t));
+  }
+  g.textBaseline = 'alphabetic';
+  if (rot.P) {
+    const arc = (d0, d1, col) => { g.strokeStyle = col; g.lineWidth = 8; g.lineCap = 'round'; g.beginPath(); g.arc(cx, cy, R - 18, A(d0), A(d1), d1 > d0); g.stroke(); };
+    arc(0, target, '#e2e8f0'); if (Math.abs(th) > 0.5) arc(0, th, '#2563eb');
+    g.lineWidth = 1; g.strokeStyle = '#dc2626'; g.setLineDash([5, 4]);
+    g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + R * Math.cos(A(target)), cy + R * Math.sin(A(target))); g.stroke(); g.setLineDash([]);
+  }
+  const sc = R / 160;
+  g.globalAlpha = 0.22; drawCar(g, cx, cy, A(thr), sc, '#64748b'); g.globalAlpha = 1;
+  drawRays(g, cx, cy, A(th), R / 300, sc, tof.mm, 280);
+  drawCar(g, cx, cy, A(th), sc, rot.active ? '#2563eb' : '#334155');
+  g.fillStyle = '#64748b'; g.textAlign = 'left'; g.font = '11px sans-serif';
+  g.fillText('đậm = thực (MPU) · mờ = góc đặt · đỏ = đích', 8, h - 8);
+}
+function drawRotCharts() {
+  const S = rot.samples;
+  lineChart('cvRotAng', 'Góc (°): đặt và thực', S.map(q => [q.t, q.thr, q.th]),
+    { series: [{ c: '#94a3b8', name: 'đặt', dash: true }, { c: '#2563eb', name: 'thực (MPU)' }], zero: true, fmt: x => x.toFixed(0), xlabel: 's' });
+  lineChart('cvRotErr', 'Sai góc (°) và bù gyro dω (°/s ÷ 10)', S.map(q => [q.t, q.thr - q.th, q.dw / 10]),
+    { series: [{ c: '#dc2626', name: 'sai góc' }, { c: '#7c3aed', name: 'dω/10' }], sym: true, symMin: 2, xlabel: 's' });
+}
+function frame() {
+  switch (page) {
+    case 'home': drawTofRadial('cvHomeTof', 400, true); drawCompass('cvHomeCompass', mpu.yaw); break;
+    case 'tof': drawTofRadial('cvTof', +$('tofScale').value); break;
+    case 'mpu': drawCompass('cvCompass', mpu.yaw); drawYawChart(); break;
+    case 'motor': drawWheel('cvWheelL', 0); drawWheel('cvWheelR', 1); drawMvChart(); break;
+    case 'pid': drawVelCharts(); break;
+    case 'straight': drawSim(); drawRunCharts(); break;
+    case 'rotate': drawRot(); drawRotCharts(); break;
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================================================
+ * Khởi chạy
+ * ============================================================================================ */
+$('btnConn').onclick = connect;
+bindInputs();
+drawI2c(); drawCalTable(); drawRunHist(); drawRotHist(); drawIdent(); updEnc(); updMpuChips();
+$('identOut').innerHTML = '';
+updDerived(); showPage(); ui();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
