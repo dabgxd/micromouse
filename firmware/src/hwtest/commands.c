@@ -117,7 +117,12 @@ void commands_dispatch(char *line)
   for (int i = 0; i < 7; i++) a[i] = strtok(NULL, " ");
   if (!cmd) return;
 
-  if (!strcmp(cmd, "ping")) {
+  if (!strcmp(cmd, "map") && a[0]) {
+    tel_map = !strcmp(a[0], "on");
+  } else if (!strcmp(cmd, "tel") && a[0]) {
+    int ms = atoi(a[0]);
+    tel_ms = ms < 20 ? 20 : ms > 1000 ? 1000 : (uint32_t)ms;
+  } else if (!strcmp(cmd, "ping")) {
     link_printf("PONG\n");
   } else if (!strcmp(cmd, "scan")) {
     cmd_scan();

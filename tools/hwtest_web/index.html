@@ -58,7 +58,8 @@
   .grid2 > .card, .grid3 > .card { margin-bottom: 0; }
   .stack { display: flex; flex-direction: column; gap: 14px; }
   .gap { margin-bottom: 14px; }
-  @media (max-width: 1150px) { .grid2, .grid3 { grid-template-columns: 1fr; } .shell { grid-template-columns: 200px 1fr; } }
+  .mapwrap { display: grid; grid-template-columns: 1fr 380px; gap: 14px; align-items: start; }
+  @media (max-width: 1150px) { .grid2, .grid3, .mapwrap { grid-template-columns: 1fr; } .shell { grid-template-columns: 200px 1fr; } }
   .hint { color: var(--muted); font-size: 12.5px; margin: 2px 0 10px; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
   .row.end { justify-content: flex-end; }
@@ -132,8 +133,9 @@
   <div class="brand">🐭 <b>Micromouse</b><span>Bảng test phần cứng</span></div>
   <div class="conn"><span class="dot" id="dot"></span><span id="status">Chưa kết nối</span></div>
   <div class="spacer"></div>
-  <label class="hint" style="margin:0">Baud <select data-cfg="baud" style="width:auto"><option>38400</option><option>115200</option></select></label>
-  <button id="btnConn" class="primary">Kết nối</button>
+  <label class="hint" style="margin:0">Baud <select data-cfg="baud" style="width:auto"><option>115200</option><option>38400</option></select></label>
+  <button id="btnConn" class="primary" title="Dây USB-TTL hoặc cổng COM / Bluetooth Classic">Kết nối cổng</button>
+  <button id="btnBle" title="Module Bluetooth BLE (kênh FFE0)">Kết nối BLE</button>
   <button id="btnStop" class="danger" title="Phím Space">■ DỪNG</button>
 </header>
 <div id="banner" hidden></div>
@@ -151,6 +153,7 @@
     <div class="group">Chuyển động</div>
     <a href="#straight" data-page="straight"><i>6</i>Chạy thẳng<b class="badge" id="bd-straight"></b></a>
     <a href="#rotate" data-page="rotate"><i>7</i>Quay tại chỗ<b class="badge" id="bd-rotate"></b></a>
+    <a href="#map" data-page="map"><i>8</i>Quét bản đồ<b class="badge" id="bd-map"></b></a>
     <div class="group">Khác</div>
     <a href="#settings" data-page="settings"><i>⚙</i>Thông số & sao lưu<b class="badge"></b></a>
     <div class="live">
@@ -168,9 +171,10 @@
     <div class="card" id="connGuide">
       <h2>Kết nối với xe</h2>
       <ol class="steps">
-        <li>Nạp firmware test (trong thư mục <code>firmware/</code>): <code>pio run -e hwtest -t upload</code>. Đèn PC13 trên board nháy đều là đúng.</li>
-        <li>Nối USB-TTL (RX → PA2, TX → PA3, chung GND) <b>hoặc</b> ghép đôi HC-05 với máy tính.</li>
-        <li>Chọn baud <b>38400</b>, bấm <b>Kết nối</b> ở góc trên rồi chọn cổng. Thấy "Đang nhận dữ liệu" là xong.</li>
+        <li>Nạp firmware test: <code>pio run -e hwtest -t upload</code>. Đèn PC13 trên board nháy đều là đúng.</li>
+        <li><b>Dây USB-TTL</b> (RX → PA2, TX → PA3, chung GND): chọn baud <b>115200</b>, bấm <b>Kết nối cổng</b> rồi chọn <code>usbserial</code>.</li>
+        <li><b>Module Bluetooth BLE</b> (TXD → PA3, RXD → PA2): bấm <b>Kết nối BLE</b> rồi chọn <b>MICROMOUSE</b>. Không cần ghép đôi trước.</li>
+        <li>Thấy "Đang nhận dữ liệu" ở góc trên là xong.</li>
       </ol>
     </div>
     <div class="grid2 gap">
@@ -510,6 +514,85 @@
       <details style="margin-top:10px"><summary>Lịch sử quay</summary><table id="rotHist"></table></details></div>
   </section>
 
+  <!-- ======================================== QUÉT BẢN ĐỒ ======================================== -->
+  <section class="page" id="pg-map">
+    <div class="page-head"><h1>Quét bản đồ (SLAM)</h1><p>Lái xe tới từng vị trí rồi bấm <b>Quét 360°</b>: xe quay tại chỗ, 5 ToF vẽ bản đồ. Các lần quét tự đổi chiều quay (trái / phải) để sai số con quay triệt tiêu; số đo được bù trễ ToF và lọc số đo "lẫn" ở mép vật; box được tìm bằng khớp hình vuông 100 mm.</p></div>
+    <div class="mapwrap">
+      <div class="card" style="margin:0">
+        <canvas id="cvMap" class="framed" height="640" style="cursor:grab;touch-action:none"></canvas>
+        <div class="row" style="justify-content:space-between">
+          <span class="row" style="margin:0">
+            <button id="btnMapFit">Vừa khung</button><button id="btnMapZin">＋</button><button id="btnMapZout">－</button>
+            <label class="hint" style="margin:0"><input type="checkbox" id="mapFollow" checked> Theo xe</label>
+          </span>
+          <span class="hint" style="margin:0">Trắng = trống · đen = vật cản · xám = chưa biết · xanh = đường đi · cam = điểm quét · lăn chuột để phóng to, kéo để di chuyển</span>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card" style="margin:0">
+          <h2>1. Phiên quét</h2>
+          <div class="fields" style="grid-template-columns:repeat(3,1fr)">
+            <label class="field">x xuất phát (mm)<input type="number" data-cfg="slam.x0" step="5"></label>
+            <label class="field">y xuất phát (mm)<input type="number" data-cfg="slam.y0" step="5"></label>
+            <label class="field">Hướng (°)<input type="number" data-cfg="slam.th0" step="5"></label>
+          </div>
+          <p class="hint" style="margin:6px 0">Toạ độ tâm trục bánh lúc bắt đầu. Nhanh: <a href="#" id="mapPreset0">gốc (0, 0, 90°)</a> · <a href="#" id="mapPresetField">vạch xuất phát sân thi (200, −95, 90°)</a></p>
+          <div class="row">
+            <button id="btnMapStart" class="primary slamb" disabled>▶ Bắt đầu map mới</button>
+            <button id="btnMapStop" class="slamb" disabled>■ Kết thúc</button>
+            <span id="mapChip" class="chip">Chưa bắt đầu</span>
+          </div>
+        </div>
+        <div class="card" style="margin:0">
+          <h2>2. Điều khiển & quét</h2>
+          <div class="row">PWM lái tay <input type="range" data-cfg="drive.pwm" min="10" max="100" style="width:140px"> <b class="num" id="mapPwmTxt"></b></div>
+          <div class="pad" style="grid-template-columns:repeat(3,76px);grid-template-rows:repeat(2,52px)">
+            <span></span><button class="hold" data-dir="fwd" disabled>▲</button><span></span>
+            <button class="hold" data-dir="left" disabled>⟲</button><button class="hold" data-dir="back" disabled>▼</button><button class="hold" data-dir="right" disabled>⟳</button>
+          </div>
+          <div class="row" style="justify-content:center">
+            <button class="slamb mapstep" data-step="fwd" disabled>▲ 10 cm</button><button class="slamb mapstep" data-step="back" disabled>▼ 10 cm</button>
+            <button class="slamb mapstep" data-step="left" disabled>⟲ 90°</button><button class="slamb mapstep" data-step="right" disabled>⟳ 90°</button>
+          </div>
+          <p class="hint center" style="margin:0">Nút "10 cm / 90°" chạy kín vòng (PID + gyro) nên odometry chuẩn hơn lái tay. Phím mũi tên / WASD cũng lái được.</p>
+          <button id="btnMapScan" class="primary big slamb" disabled style="width:100%;margin-top:10px">⟳ Quét 360°</button>
+          <div class="bar" id="mapScanBarWrap" hidden style="margin-top:8px"><i id="mapScanBar"></i></div>
+        </div>
+        <div class="card" style="margin:0">
+          <h2>3. Trạng thái</h2>
+          <div class="stats" style="grid-template-columns:repeat(3,1fr)">
+            <div class="stat"><div class="k">x</div><div class="v" id="mapX" style="font-size:16px">–</div></div>
+            <div class="stat"><div class="k">y</div><div class="v" id="mapY" style="font-size:16px">–</div></div>
+            <div class="stat"><div class="k">Hướng</div><div class="v" id="mapTh" style="font-size:16px">–</div></div>
+          </div>
+          <p class="hint num" id="mapInfo" style="margin:8px 0 0">–</p>
+        </div>
+        <div class="card" style="margin:0">
+          <h2>4. Xuất bản đồ</h2>
+          <div class="row">
+            <button id="btnMapPng" class="slamx" disabled>⬇ Ảnh PNG</button>
+            <button id="btnMapJson" class="slamx" disabled>⬇ Dữ liệu JSON</button>
+            <button id="btnMapBoxes" class="slamx" disabled>Tìm box</button>
+          </div>
+          <div id="mapBoxOut" class="hint" style="margin:0"></div>
+        </div>
+        <details class="card" style="margin:0">
+          <summary>Thông số thuật toán</summary>
+          <div class="fields" style="margin-top:8px;grid-template-columns:repeat(2,1fr)">
+            <label class="field">Ô lưới (mm)<input type="number" data-cfg="slam.res" min="5" max="25" step="5"></label>
+            <label class="field">Góc nón ToF (°)<input type="number" data-cfg="slam.fov" min="5" max="35" step="1"></label>
+            <label class="field">Tầm đo dùng tối đa (mm)<input type="number" data-cfg="slam.maxr" min="300" max="1500" step="50"></label>
+            <label class="field">Tốc độ quét (°/s)<input type="number" data-cfg="slam.w" min="10" max="90" step="5"></label>
+            <label class="field">Bù trễ ToF (ms)<input type="number" data-cfg="slam.lat" min="0" max="100" step="5"></label>
+          </div>
+          <div class="row"><label><input type="checkbox" data-cfg="slam.match"> Khớp scan (thử nghiệm)</label></div>
+          <div class="row"><label><input type="checkbox" data-cfg="slam.drive"> Ghi bản đồ cả khi đang chạy</label></div>
+          <p class="hint">Đổi kích thước ô lưới có hiệu lực ở map mới. Quét chậm (20–30°/s) cho nhiều số đo hơn, nhất là khi dùng BLE (10 dòng/s). Số đo xa hơn "tầm dùng tối đa" chỉ để xoá ô trống, không vẽ vật cản. Khớp scan và ghi khi đang chạy mặc định tắt: trên sân chỉ có box nhỏ, mô phỏng cho thấy hai chế độ này làm bản đồ lệch thêm (box bị thấy từ phía khác nhau ở mỗi lần quét). Bật "ghi khi đang chạy" nếu cần phủ thêm vùng xa.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <!-- ======================================== THÔNG SỐ ======================================== -->
   <section class="page" id="pg-settings">
     <div class="page-head"><h1>Thông số & sao lưu</h1><p>Mọi thông số và kết quả hiệu chuẩn được lưu trong trình duyệt này. Xuất file JSON để mang sang máy khác, hoặc xuất mã C cho firmware chính.</p></div>
@@ -540,7 +623,7 @@
       </div>
       <div class="card">
         <h2>Xuất cho firmware chính</h2>
-        <p class="hint">Dán vào <code>firmware/lib/common/robot_config.h</code> (hoặc file cấu hình của code chính).</p>
+        <p class="hint">Dán vào <code>lib/common/robot_config.h</code> (hoặc file cấu hình của code chính).</p>
         <textarea id="cOut" rows="12" readonly></textarea>
         <div class="row end"><button id="btnCopyC">Sao chép</button></div>
       </div>
@@ -587,7 +670,7 @@ function setChip(id, cls, text) { const e = $(id); e.className = 'chip ' + cls; 
  * Cấu hình (lưu trong localStorage)
  * ============================================================================================ */
 const DEFAULTS = {
-  baud: '38400', cpr: 1400, circ: 140, track: 68,
+  baud: '115200', cpr: 1400, circ: 140, track: 68,
   kp: 0.4, ki: 3, kd: 0.01, ff: null, gscale: 1,
   tofCal: null, tofApply: true,
   st: { dist: 500, vel: 300, acc: 1000, yaw: 0, gyro: true, kh: 30, kg: 3, kc: 0.2, exag: true },
@@ -596,6 +679,7 @@ const DEFAULTS = {
   enc: { turns: 10, n: 1, vrev: 2, arev: 8, goPwm: 25, ppr: 7, gear: 50 },
   vel: { mode: 'fwd', rev: 1, acc: 8, a: 1, b: 5, step: 1, dur: 2.5 },
   scaleN: 5,
+  slam: { res: 10, fov: 25, maxr: 1000, w: 30, lat: 35, match: false, drive: false, x0: 0, y0: 0, th0: 90 },
 };
 const CFG_KEY = 'mm_cfg_v1';
 function merge(base, over) {
@@ -619,6 +703,8 @@ function loadCfg() {
     } catch {}
   }
   if (!Array.isArray(c.tofCal) || c.tofCal.length !== 5) c.tofCal = TOF.map(() => ({ pts: [], gain: 1, off: 0 }));
+  if (!localStorage.getItem('mm_baud115')) { c.baud = '115200'; localStorage.setItem('mm_baud115', '1'); } // firmware chuyển sang 115200
+  if (!localStorage.getItem('mm_slam2')) { c.slam.match = false; c.slam.drive = false; localStorage.setItem('mm_slam2', '1'); } // mặc định mới của trang bản đồ
   return c;
 }
 function getPath(o, p) { return p.split('.').reduce((a, k) => a?.[k], o); }
@@ -646,7 +732,7 @@ function setCfg(p, v) {
 }
 function onCfg(p) {
   if (['kp', 'ki', 'kd'].includes(p)) sendPid();
-  if (p === 'drive.pwm') $('pwmTxt').textContent = cfg.drive.pwm + '%';
+  if (p === 'drive.pwm') { $('pwmTxt').textContent = cfg.drive.pwm + '%'; $('mapPwmTxt').textContent = cfg.drive.pwm + '%'; }
   if (p === 'vel.rev' || p === 'circ') updVelTxt();
   if (p === 'tofApply') applyTofCal();
   if (p === 'st.gyro') preCheck();
@@ -659,13 +745,29 @@ const cpd = () => (+cfg.track / 2) * Math.PI / 180 / mmpc();     // xung mỗi �
 /* ============================================================================================
  * Kết nối Web Serial
  * ============================================================================================ */
-const link = { port: null, writer: null, reader: null, connected: false, lastRx: 0, lines: 0 };
-const te = new TextEncoder();
-if (!('serial' in navigator)) {
+/* Hai cách kết nối, cùng một giao thức dòng chữ:
+ *   serial: Web Serial – dây USB-TTL, hoặc module Bluetooth Classic (SPP) đã ghép đôi
+ *   ble   : Web Bluetooth – module clone "HC-05" chạy BLE, kênh FFE0 / FFE1 (notify + write) */
+const link = { kind: null, port: null, writer: null, reader: null, dev: null, chr: null, tx: Promise.resolve(),
+               rxBuf: '', connected: false, lastRx: 0, lines: 0 };
+const te = new TextEncoder(), td = new TextDecoder();
+const BLE_SVC = 0xffe0, BLE_CHR = 0xffe1, BLE_CHUNK = 20; // BLE gửi tối đa 20 byte mỗi gói
+const BLE_TEL_MS = 100; // qua BLE: telemetry 10 Hz cho vừa băng thông
+if (!('serial' in navigator) && !('bluetooth' in navigator)) {
   $('banner').hidden = false;
-  $('banner').innerHTML = '⚠️ Trình duyệt này không hỗ trợ Web Serial. Hãy mở trang bằng <b>Google Chrome</b> hoặc <b>Microsoft Edge</b> trên máy tính.';
-  $('btnConn').disabled = true;
+  $('banner').innerHTML = '⚠️ Trình duyệt này không hỗ trợ Web Serial / Web Bluetooth. Hãy mở trang bằng <b>Google Chrome</b> hoặc <b>Microsoft Edge</b> trên máy tính.';
 }
+if (!('serial' in navigator)) $('btnConn').disabled = true;
+if (!('bluetooth' in navigator)) $('btnBle').disabled = true;
+
+/* Ghép các mẩu dữ liệu nhận được thành từng dòng */
+function feed(text) {
+  link.rxBuf += text;
+  let i;
+  while ((i = link.rxBuf.indexOf('\n')) >= 0) { const l = link.rxBuf.slice(0, i).trim(); link.rxBuf = link.rxBuf.slice(i + 1); if (l) handle(l); }
+  if (link.rxBuf.length > 4000) link.rxBuf = ''; // rác không có xuống dòng (lệch baud)
+}
+
 async function connect() {
   if (link.connected) return disconnect();
   try {
@@ -673,46 +775,86 @@ async function connect() {
     await link.port.open({ baudRate: +cfg.baud });
   } catch (e) { log('! ' + e.message); if (!/No port selected/.test(e.message)) toast('Không mở được cổng: ' + e.message, 'bad'); return; }
   link.writer = link.port.writable.getWriter();
-  link.connected = true; ui();
+  Object.assign(link, { kind: 'serial', connected: true, rxBuf: '' }); ui();
   readLoop();
   setTimeout(() => send('ping'), 300);
 }
+async function connectBle() {
+  if (link.connected) return disconnect();
+  let dev;
+  try {
+    dev = await navigator.bluetooth.requestDevice({
+      filters: ['MICRO', 'HC', 'BT', 'JDY', 'HM', 'MLT'].map(namePrefix => ({ namePrefix })),
+      optionalServices: [BLE_SVC],
+    });
+    toast('Đang kết nối BLE với ' + (dev.name || 'module') + '…');
+    const svc = await (await dev.gatt.connect()).getPrimaryService(BLE_SVC);
+    const chr = await svc.getCharacteristic(BLE_CHR);
+    chr.addEventListener('characteristicvaluechanged', e => { feed(td.decode(e.target.value, { stream: true })); });
+    await chr.startNotifications();
+    dev.addEventListener('gattserverdisconnected', onBleGone);
+    Object.assign(link, { kind: 'ble', dev, chr, connected: true, rxBuf: '', tx: Promise.resolve() });
+  } catch (e) {
+    log('! ' + e.message);
+    if (e.name !== 'NotFoundError') toast('Không kết nối được BLE: ' + e.message, 'bad'); // NotFoundError = bấm Huỷ
+    try { dev?.gatt.disconnect(); } catch {}
+    return;
+  }
+  ui();
+  setTimeout(() => send('ping'), 300);
+}
+function onBleGone() { if (link.connected && link.kind === 'ble') { link.connected = false; onLinkLost(); ui(); toast('Mất kết nối BLE với xe', 'bad'); } }
 async function disconnect() {
   try { await send('stop'); } catch {}
   link.connected = false;
-  try { await link.reader?.cancel(); } catch {}
-  try { link.writer?.releaseLock(); await link.port.close(); } catch {}
-  onLinkLost(); ui();
+  if (link.kind === 'ble') {
+    try { link.dev.removeEventListener('gattserverdisconnected', onBleGone); link.dev.gatt.disconnect(); } catch {}
+  } else {
+    try { await link.reader?.cancel(); } catch {}
+    try { link.writer?.releaseLock(); await link.port.close(); } catch {}
+  }
+  link.kind = null; onLinkLost(); ui();
 }
 async function readLoop() {
-  const dec = new TextDecoder(); let buf = '';
-  while (link.port?.readable && link.connected) {
+  const dec = new TextDecoder();
+  while (link.port?.readable && link.connected && link.kind === 'serial') {
     link.reader = link.port.readable.getReader();
     try {
       for (;;) {
         const { value, done } = await link.reader.read();
         if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let i;
-        while ((i = buf.indexOf('\n')) >= 0) { const l = buf.slice(0, i).trim(); buf = buf.slice(i + 1); if (l) handle(l); }
+        feed(dec.decode(value, { stream: true }));
       }
     } catch (e) { log('! ' + e.message); break; }
     finally { link.reader.releaseLock(); }
   }
-  if (link.connected) { link.connected = false; onLinkLost(); ui(); toast('Mất kết nối với xe', 'bad'); }
+  if (link.connected && link.kind === 'serial') { link.connected = false; onLinkLost(); ui(); toast('Mất kết nối với xe', 'bad'); }
+}
+/* BLE: chia thành gói 20 byte, gửi lần lượt (Web Bluetooth không cho 2 lệnh ghi chồng nhau) */
+function bleWrite(bytes) {
+  link.tx = link.tx.then(async () => {
+    for (let i = 0; i < bytes.length && link.connected; i += BLE_CHUNK) {
+      const part = bytes.slice(i, i + BLE_CHUNK);
+      if (link.chr.properties.writeWithoutResponse) await link.chr.writeValueWithoutResponse(part);
+      else await link.chr.writeValueWithResponse(part);
+    }
+  }).catch(e => log('! ' + e.message));
+  return link.tx;
 }
 async function send(cmd) {
   if (!link.connected) return;
   if (!/^(m|vel) /.test(cmd)) log('> ' + cmd);
-  try { await link.writer.write(te.encode(cmd + '\n')); } catch (e) { log('! ' + e.message); }
+  const bytes = te.encode(cmd + '\n');
+  if (link.kind === 'ble') return bleWrite(bytes);
+  try { await link.writer.write(bytes); } catch (e) { log('! ' + e.message); }
 }
-navigator.serial?.addEventListener('disconnect', () => { if (link.connected) { link.connected = false; onLinkLost(); ui(); } });
-function onLinkLost() { stopDrive(true); velStop(true); run.active = false; rot.active = false; rotAbort(); }
+navigator.serial?.addEventListener('disconnect', () => { if (link.connected && link.kind === 'serial') { link.connected = false; onLinkLost(); ui(); } });
+function onLinkLost() { if (slam.active) { slam.busy = false; mapStop(true); } stopDrive(true); velStop(true); run.active = false; rot.active = false; rotAbort(); }
 setInterval(() => {
   if (!link.connected) return;
   const alive = Date.now() - link.lastRx < 1000;
   $('dot').className = 'dot ' + (alive ? 'on' : 'wait');
-  $('status').textContent = alive ? `Đang nhận dữ liệu · ${link.lines} dòng/s` : 'Đã mở cổng, xe chưa trả lời';
+  $('status').textContent = alive ? `Đang nhận dữ liệu${link.kind === 'ble' ? ' qua BLE' : ''} · ${link.lines} dòng/s` : 'Đã kết nối, xe chưa trả lời';
   link.lines = 0;
 }, 1000);
 
@@ -751,10 +893,12 @@ function handle(line) {
     case 'VLT': velHist.push([performance.now(), ...p.slice(1, 9).map(Number)]); return;
     case 'STT': onStt(p.slice(1).map(Number)); return;
     case 'RTT': onRtt(p.slice(1).map(Number)); return;
+    case 'MAP': onMap(p.slice(1).map(Number)); return;
   }
   log('< ' + line);
   switch (p[0]) {
     case 'HELLO':
+      if (slam.active) { mapStop(true); toast('Xe khởi động lại giữa lúc quét: phiên bản đồ đã dừng', 'warn'); }
       if (tof.started || mpu.ok) toast('Xe vừa khởi động lại: cần khởi động lại ToF và MPU', 'warn');
       tof.started = false; tof.st = [null, null, null, null, null]; mpu.ok = false; mpu.cal = false; drawTofChips(); updMpuChips();
       sendParams(); break;
@@ -794,6 +938,7 @@ function handle(line) {
   updBadges();
 }
 function sendParams() {
+  send(`tel ${link.kind === 'ble' ? BLE_TEL_MS : 40}`); // BLE chậm hơn dây: giảm tần số telemetry
   send(`pid ${+cfg.kp} ${+cfg.ki} ${+cfg.kd}`);
   if (cfg.ff) send('ff ' + cfg.ff.map(v => (+v).toFixed(2)).join(' '));
 }
@@ -804,7 +949,8 @@ function sendPid() { send(`pid ${+cfg.kp} ${+cfg.ki} ${+cfg.kd}`); }
  * ============================================================================================ */
 function ui() {
   const c = link.connected;
-  $('btnConn').textContent = c ? 'Ngắt kết nối' : 'Kết nối';
+  $('btnConn').textContent = c ? 'Ngắt kết nối' : 'Kết nối cổng';
+  $('btnBle').hidden = c;
   if (!c) { $('dot').className = 'dot'; $('status').textContent = 'Chưa kết nối'; }
   $('connGuide').hidden = c;
   ['btnQuick', 'btnScan', 'btnStab', 'btnTof', 'btnMpu', 'btnIdent', 'btnStair', 'btnVel'].forEach(id => $(id).disabled = !c);
@@ -812,6 +958,10 @@ function ui() {
   ['btnCal1', 'btnCal2'].forEach(id => $(id).disabled = !c || !tof.started);
   $$('.hold, .mvb, .gob').forEach(b => b.disabled = !c);
   $('btnRun').disabled = !c || rot.active;
+  $('btnMapStart').disabled = !c || slam.active; $('btnMapStop').disabled = !slam.active;
+  [$('btnMapScan'), ...$$('.mapstep')].forEach(b => { b.disabled = !c || !slam.active || slam.busy; });
+  $$('.slamx').forEach(b => { b.disabled = !slam.grid; });
+  $('btnMapScan').textContent = slam.scanning ? 'Đang quét…' : '⟳ Quét 360°';
   $('btnRun').textContent = run.active ? '■ Dừng' : '▶ Bắt đầu chạy';
   $('btnRun').className = run.active ? 'danger big' : 'primary big';
   $$('.rotb, .seqb').forEach(b => b.disabled = !c || rot.active || run.active);
@@ -851,7 +1001,7 @@ function showPage() {
   page = $('pg-' + id) ? id : 'home';
   $$('.page').forEach(s => s.classList.toggle('active', s.id === 'pg-' + page));
   $$('.side a').forEach(a => a.classList.toggle('active', a.dataset.page === page));
-  if (page !== 'motor') stopDrive();
+  if (page !== 'motor' && page !== 'map') stopDrive();
   if (page === 'settings') drawSettings();
 }
 addEventListener('hashchange', showPage);
@@ -1092,12 +1242,13 @@ addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' && !['range', 'checkbox'].includes(e.target.type) || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
   if (e.key === ' ') { e.preventDefault(); stopAll(); return; }
   const d = KEYS[e.key];
-  if (d && page === 'motor') { e.preventDefault(); startDrive(d); }
+  if (d && (page === 'motor' || page === 'map')) { e.preventDefault(); startDrive(d); }
 });
 addEventListener('keyup', e => { if (KEYS[e.key] === held) stopDrive(); });
 addEventListener('blur', () => stopDrive());
 function stopAll() {
   stopDrive(true); velStop(true); rotAbort();
+  if (slam.busy) { slam.aborted = true; [['RTD'], ['STD'], ['MVD', '0'], ['MVD', '1']].forEach(notifyWaiters); }
   if (run.active) { run.active = false; showRunResult('Đã dừng giữa chừng.', ''); }
   send('stop'); ui();
 }
@@ -1349,6 +1500,7 @@ function onStt(v) {
 const runHist = JSON.parse(localStorage.getItem('mm_runhist2') || '[]');
 /* STD: dL, dR, yawErrFinal, maxYawErr, ms, gyro */
 function onStd(v) {
+  if (!run.active) return; // lệnh st do trang khác gửi (ví dụ quét bản đồ)
   const k = mmpc(), [dL, dR, yf, ymax, ms, gyro] = v, P = run.P;
   run.active = false; ui();
   if (!P) return;
@@ -1414,6 +1566,7 @@ function onRtt(v) {
 const rotHist = JSON.parse(localStorage.getItem('mm_rothist2') || '[]');
 /* RTD: errFinal, th, dL, dR, ms, gyro, settleMs */
 function onRtd(v) {
+  if (!rot.active) return; // lệnh rot do trang khác gửi (ví dụ quét bản đồ)
   const [ef, th, dL, dR, ms, gyro, settle] = v, P = rot.P;
   rot.active = false; ui();
   if (!P) return;
@@ -1473,14 +1626,517 @@ $$('.seqb').forEach(b => b.onclick = async () => {
 });
 
 /* ============================================================================================
- * ⑧ Thông số & sao lưu
+ * ⑧ Quét bản đồ (SLAM 2D)
+ *   odometry : quãng đường từ encoder, hướng từ gyro (dòng MAP: encoder + yaw + 5 ToF cùng một thời điểm)
+ *   bản đồ   : lưới chiếm chỗ log-odds; mỗi số đo ToF là một nón (mô hình sonar Elfes): trong nón = trống,
+ *              cung ở khoảng cách đo = vật cản, giữa nón tin hơn mép nón
+ *   khớp scan: sau mỗi lần quét 360°, tìm (dx, dy, dθ) để scan mới trùng bản đồ cũ nhất (trường khoảng cách
+ *              + tìm lưới thô rồi mịn), sửa vị trí xe trước khi ghi scan vào bản đồ
+ * ============================================================================================ */
+const TOF_MOUNT = [ // vị trí ToF so với tâm trục bánh (mm), góc so với mũi xe (độ, + = trái) – tools/planner/config.json
+  { x: 55, y: 40, a: 90 }, { x: 80, y: 24, a: 45 }, { x: 88, y: 0, a: 0 }, { x: 80, y: -24, a: -45 }, { x: 55, y: -40, a: -90 },
+];
+/* Mô hình cảm biến: cả nón dùng để xoá ô trống; vật cản chỉ ghi ở phần giữa nón (occFrac × nửa góc nón),
+ * vì ToF trả về vật gần nhất trong nón: ghi cả cung rộng sẽ làm vật cản bị nhoè.
+ * Ô trống chỉ xoá trong phần giữa nón (freeFrac): vật nhỏ ở sát mép nón danh định thường không được cảm biến bắt,
+ * nếu xoá cả nón thì cạnh box bị "ăn" mất. */
+const SM = { occ: 0.9, free: -0.25, occFrac: 0.35, freeFrac: 0.5, edgeW: 0.15 };
+const L_MIN = -4, L_MAX = 4.5, L_SHOW_OCC = 0.85;
+const MAP_SIZE_MM = 6000;
+const slam = {
+  active: false, busy: false, scanning: false, grid: null, stamp: null, occStamp: null, rid: 0,
+  W: 0, H: 0, res: 10, ox: 0, oy: 0, pose: { x: 0, y: 0, th: 90 }, last: null, lastInt: null,
+  path: [], stations: [], scanBuf: [], boxes: [], lastMatch: null, nReadings: 0,
+  img: null, imgAt: 0, dirty: true, view: { cx: 0, cy: 0, s: 0.2 }, streams: null,
+};
+const wrap180 = a => ((a + 540) % 360) - 180;
+
+function slamNew() {
+  const res = Math.max(5, Math.min(25, +cfg.slam.res || 10));
+  const W = Math.round(MAP_SIZE_MM / res);
+  Object.assign(slam, {
+    res, W, H: W, ox: +cfg.slam.x0 - MAP_SIZE_MM / 2, oy: +cfg.slam.y0 - MAP_SIZE_MM / 2,
+    grid: new Float32Array(W * W), stamp: new Uint32Array(W * W), occStamp: new Uint32Array(W * W), rid: 0,
+    pose: { x: +cfg.slam.x0, y: +cfg.slam.y0, th: +cfg.slam.th0 }, last: null, lastInt: null, hist: [],
+    path: [[+cfg.slam.x0, +cfg.slam.y0]], stations: [], scanBuf: [], boxes: [], lastMatch: null, nReadings: 0, dirty: true,
+  });
+  slam.view.cx = slam.pose.x; slam.view.cy = slam.pose.y;
+  $('mapBoxOut').innerHTML = '';
+}
+function cellIdx(x, y) {
+  const cx = Math.floor((x - slam.ox) / slam.res), cy = Math.floor((y - slam.oy) / slam.res);
+  return cx < 0 || cy < 0 || cx >= slam.W || cy >= slam.H ? -1 : cy * slam.W + cx;
+}
+
+/* Ghi một số đo ToF (nón) vào bản đồ. r < 0 = ngoài tầm: chỉ xoá ô trống. w = độ tin của số đo. */
+function integrateReading(sx, sy, ang, r, w) {
+  const res = slam.res, maxr = +cfg.slam.maxr, fov = (+cfg.slam.fov) * Math.PI / 180, half = fov / 2;
+  const hit = r > 25 && r <= maxr;
+  const rr = hit ? r : (r < 0 || r > maxr) ? Math.min(maxr, 800) : 0;
+  if (!rr) return;
+  const id = ++slam.rid, g = slam.grid, st = slam.stamp, os = slam.occStamp;
+  const lfree = SM.free * w * (hit ? 1 : 0.5), fend = hit ? rr - res * 1.5 : rr, step = res * 0.7;
+  const span = half * Math.max(SM.freeFrac, SM.occFrac), fh = half * SM.freeFrac + 1e-9;
+  const n = Math.max(2, Math.ceil(2 * span * rr / res * 1.5));
+  for (let k = 0; k <= n; k++) {
+    const phi = -span + 2 * span * k / n, ca = Math.cos(ang + phi), sa = Math.sin(ang + phi);
+    if (Math.abs(phi) <= fh) for (let d = 0; d < fend; d += step) {
+      const i = cellIdx(sx + ca * d, sy + sa * d);
+      if (i < 0) break;
+      if (st[i] !== id) { st[i] = id; if (os[i] !== id) g[i] = Math.max(L_MIN, g[i] + lfree); }
+    }
+    const u = Math.abs(phi) / (half * SM.occFrac);
+    if (hit && u <= 1) {
+      const i = cellIdx(sx + ca * rr, sy + sa * rr);
+      if (i >= 0 && os[i] !== id) {
+        os[i] = id;
+        g[i] = Math.min(L_MAX, g[i] + SM.occ * w * (1 - 0.5 * u * u)); // giữa nón tin nhất
+      }
+    }
+  }
+  slam.nReadings++;
+}
+function sensorPose(p, i) {
+  const t = p.th * Math.PI / 180, m = TOF_MOUNT[i], c = Math.cos(t), s = Math.sin(t);
+  return [p.x + m.x * c - m.y * s, p.y + m.x * s + m.y * c, t + m.a * Math.PI / 180];
+}
+function integrateSample(smp, w) {
+  smp.r.forEach((r, i) => { if (tof.st[i]?.ok) { const [sx, sy, a] = sensorPose(smp, i); integrateReading(sx, sy, a, r, w * (smp.wt ? smp.wt[i] : 1)); } });
+  slam.dirty = true;
+}
+
+/* Dòng MAP: ms, xung L, xung R, yaw, 5 ToF (thô) */
+/* Số đo ToF trong dòng MAP là số đo mới nhất của cảm biến, nhưng nó được đo trong khung ~33 ms đã qua
+ * (trễ trung bình ~35 ms). Khi xe đang quay 30°/s, gán số đo cho tư thế hiện tại sẽ lệch ~1° → vật cản bị xoay
+ * quanh điểm quét. Vì vậy mỗi số đo được gán tư thế của xe tại (t − trễ), nội suy từ lịch sử tư thế. */
+function poseAt(t) {
+  const h = slam.hist;
+  if (!h.length) return slam.pose;
+  if (t >= h[h.length - 1].ms) return h[h.length - 1];
+  for (let i = h.length - 1; i > 0; i--) {
+    const a = h[i - 1], b = h[i];
+    if (a.ms <= t) { const u = (t - a.ms) / Math.max(1, b.ms - a.ms); return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, th: a.th + (b.th - a.th) * u }; }
+  }
+  return h[0];
+}
+/* Lúc quét, mỗi ToF cho một chuỗi số đo theo góc. Ở mép vật (khoảng cách nhảy đột ngột so với số đo kề bên),
+ * nón ToF thấy cùng lúc vật gần và vật xa nên số đo dễ bị "lẫn" (một khoảng cách ở giữa, không có vật nào ở đó):
+ * các số đo này được giảm độ tin để không xoá nhầm cạnh box hoặc vẽ vật cản ma. */
+function edgeWeights(buf) {
+  buf.forEach(s => { s.wt = [1, 1, 1, 1, 1]; });
+  for (let i = 0; i < 5; i++) for (let k = 0; k < buf.length; k++) {
+    const b = buf[k].r[i]; if (b < 0) continue;
+    const J = Math.max(30, 0.06 * b), jump = o => o < 0 || Math.abs(b - o) > J;
+    if ((k > 0 && jump(buf[k - 1].r[i])) || (k < buf.length - 1 && jump(buf[k + 1].r[i]))) buf[k].wt[i] = SM.edgeW;
+  }
+}
+function onMap(v) {
+  const [ms, eL, eR, yaw, ...raw] = v;
+  onTof(raw.slice(0, 5)); // giữ các trang khác cập nhật khi đã tắt luồng TOF riêng
+  mpu.yaw = yaw; $('lvYaw').textContent = yaw.toFixed(1) + '°'; $('homeYaw').textContent = yaw.toFixed(1) + '°';
+  if (!slam.active) return;
+  const p = slam.pose;
+  if (slam.last) {
+    const k = mmpc(), dL = (eL - slam.last.eL) * k, dR = (eR - slam.last.eR) * k, ds = (dL + dR) / 2;
+    const dth = mpu.ok ? wrap180(yaw - slam.last.yaw) : (dR - dL) / +cfg.track * 180 / Math.PI;
+    const tm = (p.th + dth / 2) * Math.PI / 180;
+    p.x += ds * Math.cos(tm); p.y += ds * Math.sin(tm); p.th += dth;
+    const lp = slam.path[slam.path.length - 1];
+    if (Math.hypot(p.x - lp[0], p.y - lp[1]) > 5) slam.path.push([p.x, p.y]);
+  }
+  slam.last = { eL, eR, yaw };
+  slam.hist.push({ ms, x: p.x, y: p.y, th: p.th }); if (slam.hist.length > 12) slam.hist.shift();
+  const q = poseAt(ms - Math.max(0, +cfg.slam.lat || 0));
+  const smp = { x: q.x, y: q.y, th: q.th, r: tof.mm.slice() };
+  if (slam.scanning) slam.scanBuf.push(smp);
+  else if (cfg.slam.drive) {
+    const li = slam.lastInt; // chỉ ghi khi xe đã đi / quay đủ xa, tránh dồn số đo lặp lại lúc đứng yên
+    if (!li || Math.hypot(p.x - li.x, p.y - li.y) > 15 || Math.abs(p.th - li.th) > 3) { integrateSample(smp, 0.5); slam.lastInt = { ...smp }; }
+  }
+  slam.dirty = true;
+  updMapStats();
+}
+function updMapStats() {
+  const p = slam.pose;
+  $('mapX').textContent = p.x.toFixed(0) + ' mm';
+  $('mapY').textContent = p.y.toFixed(0) + ' mm';
+  $('mapTh').textContent = wrap180(p.th).toFixed(1) + '°';
+  const m = slam.lastMatch;
+  $('mapInfo').innerHTML = `${slam.stations.length} lần quét · ${slam.nReadings.toLocaleString('vi')} số đo · ô ${slam.res} mm` +
+    (m ? `<br>Lần khớp gần nhất: ${m.ok ? `sửa Δx ${f1(m.dx)} mm, Δy ${f1(m.dy)} mm, Δθ ${f1(m.dth)}° · độ khớp ${(m.q * 100).toFixed(0)}%` : m.why}` : '');
+}
+
+/* ---------- khớp scan ---------- */
+function likelihoodField() { // khoảng cách (đơn vị chamfer 3-4, 3 = 1 ô) từ mỗi ô tới ô vật cản gần nhất
+  const { W, H, grid } = slam, INF = 1 << 20, d = new Int32Array(W * H);
+  let nOcc = 0;
+  for (let i = 0; i < W * H; i++) { if (grid[i] > L_SHOW_OCC) { d[i] = 0; nOcc++; } else d[i] = INF; }
+  if (nOcc < 40) return null;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; let v = d[i];
+    if (x > 0) v = Math.min(v, d[i - 1] + 3);
+    if (y > 0) { v = Math.min(v, d[i - W] + 3); if (x > 0) v = Math.min(v, d[i - W - 1] + 4); if (x < W - 1) v = Math.min(v, d[i - W + 1] + 4); }
+    d[i] = v;
+  }
+  for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) {
+    const i = y * W + x; let v = d[i];
+    if (x < W - 1) v = Math.min(v, d[i + 1] + 3);
+    if (y < H - 1) { v = Math.min(v, d[i + W] + 3); if (x < W - 1) v = Math.min(v, d[i + W + 1] + 4); if (x > 0) v = Math.min(v, d[i + W - 1] + 4); }
+    d[i] = v;
+  }
+  return { d, nOcc };
+}
+function lutFor(sigma) { // điểm số Gauss theo khoảng cách (mm) tới vật cản
+  const lut = new Float32Array(256);
+  for (let k = 0; k < 256; k++) { const mm = k / 3 * slam.res; lut[k] = Math.exp(-mm * mm / (2 * sigma * sigma)); }
+  return lut;
+}
+/* Ô vật cản của riêng lần quét: ghi lần quét vào một lưới tạm (cùng mô hình nón + xoá ô trống như bản đồ chung).
+ * Không dùng điểm thô ở tia giữa: ToF nón rộng trả về vật gần nhất trong nón nên điểm thô bị nhoè thành cung,
+ * còn lưới đã được các tia khác xoá phần nhoè, giống hệt cách bản đồ chung được dựng → khớp không bị lệch. */
+let scanGrid = null;
+function scanCells(buf, c) {
+  const n = slam.W * slam.H;
+  if (!scanGrid || scanGrid.g.length !== n) scanGrid = { g: new Float32Array(n), st: new Uint32Array(n), os: new Uint32Array(n) };
+  scanGrid.g.fill(0);
+  const keep = { grid: slam.grid, stamp: slam.stamp, occStamp: slam.occStamp, nReadings: slam.nReadings };
+  Object.assign(slam, { grid: scanGrid.g, stamp: scanGrid.st, occStamp: scanGrid.os });
+  try { buf.forEach(smp => integrateSample(smp, 1)); } finally { Object.assign(slam, keep); }
+  const { W, H, res, ox, oy } = slam, R = Math.ceil((+cfg.slam.maxr + 150) / res);
+  const cx = Math.floor((c.x - ox) / res), cy = Math.floor((c.y - oy) / res), pts = [];
+  for (let y = Math.max(0, cy - R); y <= Math.min(H - 1, cy + R); y++)
+    for (let x = Math.max(0, cx - R); x <= Math.min(W - 1, cx + R); x++) {
+      const v = scanGrid.g[y * W + x];
+      if (v > L_SHOW_OCC) pts.push([ox + (x + 0.5) * res, oy + (y + 0.5) * res, Math.min(1, v / 2)]);
+    }
+  return pts;
+}
+/* Tìm (dx, dy, dθ) quanh điểm quét c sao cho ô vật cản của lần quét trùng vật cản của bản đồ chung nhất.
+ * Có "giá" cho độ sửa (odometry thường chỉ sai vài cm / vài độ) để không nhảy sang chỗ khớp giả
+ * giữa các box giống nhau. Tìm thô → mịn → rất mịn. */
+function matchScan(pts, c, L) {
+  const N = pts.reduce((a, p) => a + p[2], 0) || 1;
+  const prior = (dx, dy, dth) => N * 0.15 * ((dx * dx + dy * dy) / (2 * 40 * 40) + dth * dth / (2 * 3 * 3));
+  const score = (lut, dx, dy, dth) => {
+    const t = dth * Math.PI / 180, co = Math.cos(t), si = Math.sin(t);
+    let s = 0;
+    for (const [x0, y0, w] of pts) {
+      const rx = x0 - c.x, ry = y0 - c.y, i = cellIdx(c.x + co * rx - si * ry + dx, c.y + si * rx + co * ry + dy);
+      if (i >= 0) { const k = L.d[i]; if (k < 256) s += lut[k] * w; }
+    }
+    return s;
+  };
+  const search = (lut, b, rXY, sXY, rTh, sTh) => {
+    let best = { ...b, s: score(lut, b.dx, b.dy, b.dth), j: 0 }; best.j = best.s - prior(b.dx, b.dy, b.dth);
+    for (let dth = b.dth - rTh; dth <= b.dth + rTh + 1e-9; dth += sTh)
+      for (let dx = b.dx - rXY; dx <= b.dx + rXY + 1e-9; dx += sXY)
+        for (let dy = b.dy - rXY; dy <= b.dy + rXY + 1e-9; dy += sXY) {
+          const s = score(lut, dx, dy, dth), j = s - prior(dx, dy, dth);
+          if (j > best.j) best = { dx, dy, dth, s, j };
+        }
+    return best;
+  };
+  const lutC = lutFor(40), lutF = lutFor(20);
+  let best = search(lutC, { dx: 0, dy: 0, dth: 0 }, 100, 20, 6, 1.5); // thô: ±10 cm, ±6°
+  best = search(lutF, best, 20, 5, 1.5, 0.5);                         // mịn
+  best = search(lutF, best, 5, 2.5, 0.5, 0.25);                       // rất mịn
+  const zero = score(lutF, 0, 0, 0);
+  return { dx: best.dx, dy: best.dy, dth: best.dth, s: best.s, zero, q: best.s / N };
+}
+function applyCorrection(c, dx, dy, dth) { // xoay quanh điểm quét c rồi tịnh tiến: sửa vị trí xe và các mẫu của lần quét
+  const t = dth * Math.PI / 180, co = Math.cos(t), si = Math.sin(t);
+  const tr = o => { const rx = o.x - c.x, ry = o.y - c.y; o.x = c.x + co * rx - si * ry + dx; o.y = c.y + si * rx + co * ry + dy; o.th += dth; };
+  tr(slam.pose); slam.scanBuf.forEach(tr); slam.hist.forEach(tr);
+  slam.path.push([slam.pose.x, slam.pose.y]);
+}
+
+/* ---------- phiên quét, điều khiển ---------- */
+async function mapStart() {
+  if (!link.connected) return;
+  if (!tof.started) { toast('Đang bật ToF…'); send('tof init'); await waitFor('TOFI', p => p[1] === '4', 8000); }
+  if (!mpu.ok) { send('mpu init'); await waitFor('MPUI', () => true, 3000); }
+  if (mpu.ok && !mpu.cal) toast('MPU chưa hiệu chuẩn: nên hiệu chuẩn ở trang MPU để hướng không bị trôi', 'warn');
+  slamNew();
+  slam.active = true;
+  send('map on'); send('tof off'); send('mpu off'); // dòng MAP đã chứa đủ ToF + yaw: tắt luồng riêng cho nhẹ đường truyền
+  // chờ dòng MAP đầu tiên làm mốc encoder / yaw: nếu xe di chuyển trước mốc này, đoạn đầu sẽ bị mất khỏi odometry
+  slam.busy = true; ui();
+  for (let t = 0; t < 30 && !slam.last && slam.active; t++) await sleep(100);
+  slam.busy = false;
+  if (!slam.last) toast('Chưa nhận được dữ liệu MAP từ xe: firmware có phải bản mới (lệnh map on)?', 'bad');
+  setChip('mapChip', 'ok', 'Đang ghi bản đồ');
+  ui();
+}
+function mapStop(silent) {
+  if (!slam.active) return;
+  slam.active = false; slam.scanning = false;
+  if (!silent) { send('map off'); send('tof on'); if (mpu.ok) send('mpu on'); }
+  setChip('mapChip', '', slam.stations.length ? `Đã dừng · ${slam.stations.length} lần quét` : 'Đã dừng');
+  ui();
+}
+async function mapScan() {
+  if (!slam.active || slam.busy) return;
+  slam.busy = true; slam.aborted = false; ui();
+  const c = { x: slam.pose.x, y: slam.pose.y };
+  const w = Math.max(10, +cfg.slam.w || 30), dur = 360 / w * 1000;
+  slam.scanBuf = []; slam.scanning = true;
+  $('mapScanBarWrap').hidden = false; $('mapScanBar').style.width = '0';
+  const t0 = performance.now(), timer = setInterval(() => { $('mapScanBar').style.width = Math.min(100, (performance.now() - t0) / dur * 100) + '%'; }, 200);
+  /* Chọn chiều quay để tổng góc đã quay (so với lúc bắt đầu) về gần 0: sai số tỉ lệ con quay (vd 0.3% → 1.1°/vòng)
+   * chỉ phụ thuộc tổng góc ròng, nên quét xen kẽ trái / phải làm sai số này triệt tiêu thay vì cộng dồn mỗi lần quét. */
+  const dir = slam.pose.th - +cfg.slam.th0 > 0 ? -1 : 1;
+  send(`rot ${360 * dir} ${w} ${Math.max(60, w * 3)} ${+cfg.rot.kt} ${+cfg.rot.ktd} ${cpd().toFixed(4)}`);
+  const done = await waitFor('RTD', () => true, dur + 20000);
+  await sleep(400); // thêm vài số đo lúc đứng yên
+  clearInterval(timer); $('mapScanBarWrap').hidden = true;
+  slam.scanning = false;
+  if (!done || !slam.active || slam.aborted) { // bị dừng giữa chừng: bỏ lần quét dở
+    slam.scanBuf = []; slam.busy = false; slam.aborted = false; ui();
+    toast('Đã huỷ lần quét, không ghi vào bản đồ', 'warn'); return;
+  }
+  // khớp scan với bản đồ đã có (bỏ qua ở lần quét đầu)
+  edgeWeights(slam.scanBuf);
+  const L = slam.stations.length && cfg.slam.match ? likelihoodField() : null, pts = L ? scanCells(slam.scanBuf, c) : [];
+  if (L && pts.length >= 30) {
+    const m = matchScan(pts, c, L);
+    const ok = m.q > 0.25 && m.s >= m.zero * 1.02 && (m.dx || m.dy || m.dth);
+    slam.lastMatch = ok ? { ok: true, dx: m.dx, dy: m.dy, dth: m.dth, q: m.q }
+                        : { ok: false, why: m.q <= 0.25 ? `không khớp được (độ khớp ${(m.q * 100).toFixed(0)}%): giữ nguyên odometry` : 'odometry đã khớp, không cần sửa' };
+    if (ok) applyCorrection(c, m.dx, m.dy, m.dth);
+  } else if (slam.stations.length) slam.lastMatch = { ok: false, why: !cfg.slam.match ? 'đang tắt khớp scan' : !L ? 'bản đồ chưa đủ vật cản để khớp' : 'lần quét thấy quá ít vật cản để khớp' };
+  slam.scanBuf.forEach(s => integrateSample(s, 1));
+  slam.stations.push({ x: slam.pose.x, y: slam.pose.y, n: slam.scanBuf.length, corr: slam.lastMatch });
+  slam.lastInt = { ...slam.pose };
+  slam.scanBuf = []; slam.busy = false;
+  setChip('mapChip', 'ok', `Đang ghi bản đồ · ${slam.stations.length} lần quét`);
+  updMapStats(); ui();
+}
+async function mapStep(kind) {
+  if (!slam.active || slam.busy) return;
+  slam.busy = true; slam.aborted = false; ui();
+  const k = 1 / mmpc();
+  if (kind === 'fwd') {
+    const s = cfg.st;
+    send(`st ${Math.round(100 * k)} ${Math.round(150 * k)} ${Math.round(500 * k)} ${mpu.ok ? s.kh : 0} ${mpu.ok ? s.kg : 0} 0 ${s.kc}`);
+    await waitFor('STD', () => true, 8000);
+  } else if (kind === 'back') {
+    const c = Math.round(100 * k);
+    send(`mv ${-c} ${-c} ${Math.round(150 * k)} ${Math.round(500 * k)}`);
+    await Promise.all([waitFor('MVD', p => p[1] === '0', 8000), waitFor('MVD', p => p[1] === '1', 8000)]);
+  } else {
+    send(`rot ${kind === 'left' ? 90 : -90} 90 300 ${+cfg.rot.kt} ${+cfg.rot.ktd} ${cpd().toFixed(4)}`);
+    await waitFor('RTD', () => true, 10000);
+  }
+  await sleep(200);
+  slam.busy = false; slam.aborted = false; ui();
+}
+
+/* ---------- tìm box (vuông 100 mm) trong bản đồ ---------- */
+/* Tìm box 100 mm bằng khớp mẫu: thử đặt một hình vuông 100 mm (song song trục sân) tại mọi vị trí gần vật cản,
+ * chấm điểm: + ô vật cản nằm trên cạnh hình vuông, − ô đã thấy trống nằm trên cạnh hoặc bên trong, − ô vật cản
+ * nằm sâu bên trong (mặt box phải nằm ở cạnh). Lấy các đỉnh điểm cao nhất, bỏ hình vuông chồng lên nhau.
+ * Không phụ thuộc mặt box có liền nhau hay không (ToF thường chỉ thấy 1–2 mặt, góc box hay bị đứt). */
+function detectBoxes() {
+  const { W, H, grid, res } = slam, half = Math.round(50 / res), n = W * H;
+  const P = new Float32Array(n), F = new Float32Array(n), cand = new Uint8Array(n);
+  for (let i = 0; i < n; i++) { const g = grid[i]; P[i] = g > 0 ? Math.min(g, 3) : 0; F[i] = g < 0 ? Math.min(-g, 3) : 0; }
+  // chỉ thử tâm ở gần ô vật cản
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (grid[y * W + x] > L_SHOW_OCC)
+    for (let dy = -half - 1; dy <= half + 1; dy++) for (let dx = -half - 1; dx <= half + 1; dx++) {
+      const X = x + dx, Y = y + dy; if (X > half + 2 && Y > half + 2 && X < W - half - 2 && Y < H - half - 2) cand[Y * W + X] = 1;
+    }
+  // tâm thử = góc ô (X, Y): box chiếm các cột X-half .. X+half-1
+  const score = (X, Y) => {
+    const L = X - half, R = X + half - 1, B = Y - half, T = Y + half - 1;
+    let s = 0, nOcc = 0;
+    const edge = (i, j) => { // hai ô sát cạnh (ngoài + trong)
+      const a = P[i] > P[j] ? P[i] : P[j];
+      if (a > L_SHOW_OCC) { nOcc++; s += a; }
+      s -= 1.5 * Math.min(F[i], F[j]);
+    };
+    for (let y = B; y <= T; y++) { edge(y * W + L - 1, y * W + L); edge(y * W + R + 1, y * W + R); }
+    for (let x = L; x <= R; x++) { edge((B - 1) * W + x, B * W + x); edge((T + 1) * W + x, T * W + x); }
+    for (let y = B + 2; y <= T - 2; y++) for (let x = L + 2; x <= R - 2; x++) { const i = y * W + x; s -= 0.6 * F[i] + (P[i] > 1.5 ? 0.4 * P[i] : 0); }
+    return nOcc >= 4 ? s : -1e9;
+  };
+  const S = new Float32Array(n).fill(-1e9), list = [];
+  for (let i = 0; i < n; i++) if (cand[i]) { const v = score(i % W, (i / W) | 0); S[i] = v; if (v >= 8) list.push(i); }
+  list.sort((a, b) => S[b] - S[a]);
+  const out = [];
+  for (const i of list) {
+    const X = i % W, Y = (i / W) | 0;
+    // đỉnh cục bộ + nội suy dưới một ô
+    let peak = true;
+    for (let dy = -1; dy <= 1 && peak; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && S[i + dy * W + dx] > S[i]) { peak = false; break; }
+    if (!peak) continue;
+    const sub = (m, z, p) => { const d = m - 2 * z + p; return d < 0 ? Math.max(-0.5, Math.min(0.5, (m - p) / (2 * d))) : 0; };
+    const fx = sub(S[i - 1], S[i], S[i + 1]), fy = sub(S[i - W], S[i], S[i + W]);
+    const bx = slam.ox + (X + fx) * res, by = slam.oy + (Y + fy) * res;
+    if (out.some(b => Math.abs(b.x - bx) < 95 && Math.abs(b.y - by) < 95)) continue; // box không chồng nhau
+    out.push({ x: bx, y: by, s: S[i] });
+  }
+  out.sort((a, b) => a.y - b.y || a.x - b.x);
+  slam.boxes = out; slam.dirty = true;
+  $('mapBoxOut').innerHTML = out.length
+    ? `<table><tr><th>#</th><th>Tâm x</th><th>Tâm y</th><th>Độ tin</th></tr>${out.map((b, i) => `<tr class="num"><td>${i + 1}</td><td>${b.x.toFixed(0)}</td><td>${b.y.toFixed(0)}</td><td>${b.s.toFixed(0)}${b.s < 20 ? ' ⚠' : ''}</td></tr>`).join('')}</table>
+       <p class="hint" style="margin:6px 0 0">Tâm tìm bằng cách khớp hình vuông 100 mm với các mặt box mà ToF thấy. Độ tin thấp (&lt; 15) nên kiểm tra lại bằng mắt. Có trong file JSON (mục static_boxes).</p>`
+    : 'Không thấy vật cản nào khớp hình box 100 mm.';
+}
+
+/* ---------- vẽ ---------- */
+function mapImage() { // ảnh lưới (1 điểm ảnh = 1 ô), dựng lại tối đa 5 lần/giây
+  const now = performance.now();
+  if (slam.img && (!slam.dirty || now - slam.imgAt < 200)) return slam.img;
+  const { W, H, grid } = slam;
+  if (!slam.img || slam.img.width !== W) { slam.img = document.createElement('canvas'); slam.img.width = W; slam.img.height = H; }
+  const ctx = slam.img.getContext('2d'), id = ctx.createImageData(W, H), px = id.data;
+  for (let y = 0; y < H; y++) {
+    const row = (H - 1 - y) * W; // ảnh: hàng trên cùng = y lớn nhất
+    for (let x = 0; x < W; x++) {
+      const l = grid[y * W + x], o = (row + x) * 4;
+      let v;
+      if (Math.abs(l) < 0.15) { px[o] = 214; px[o + 1] = 220; px[o + 2] = 228; px[o + 3] = 255; continue; } // chưa biết
+      v = 255 / (1 + Math.exp(l)); // p(trống) * 255
+      px[o] = px[o + 1] = px[o + 2] = v; px[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  slam.imgAt = now; slam.dirty = false;
+  return slam.img;
+}
+function paintMap(g, w, h, view, opts = {}) {
+  const s = view.s, X = x => w / 2 + (x - view.cx) * s, Y = y => h / 2 - (y - view.cy) * s;
+  g.fillStyle = '#d6dce4'; g.fillRect(0, 0, w, h);
+  if (slam.grid) {
+    g.imageSmoothingEnabled = false;
+    g.drawImage(mapImage(), X(slam.ox), Y(slam.oy + slam.H * slam.res), slam.W * slam.res * s, slam.H * slam.res * s);
+  }
+  // lưới 100 mm
+  const step = s > 0.4 ? 100 : s > 0.08 ? 500 : 1000;
+  g.strokeStyle = 'rgba(37,99,235,.10)'; g.lineWidth = 1;
+  const xa = Math.floor((view.cx - w / 2 / s) / step) * step, ya = Math.floor((view.cy - h / 2 / s) / step) * step;
+  for (let x = xa; X(x) < w; x += step) { g.beginPath(); g.moveTo(X(x), 0); g.lineTo(X(x), h); g.stroke(); }
+  for (let y = ya; Y(y) > 0; y += step) { g.beginPath(); g.moveTo(0, Y(y)); g.lineTo(w, Y(y)); g.stroke(); }
+  // trục toạ độ gốc
+  g.strokeStyle = 'rgba(220,38,38,.5)'; g.beginPath(); g.moveTo(X(0), Y(0)); g.lineTo(X(150), Y(0)); g.stroke();
+  g.strokeStyle = 'rgba(22,163,74,.5)'; g.beginPath(); g.moveTo(X(0), Y(0)); g.lineTo(X(0), Y(150)); g.stroke();
+  // đường đi, điểm quét, box
+  if (slam.path.length > 1) {
+    g.strokeStyle = '#2563eb'; g.lineWidth = 2; g.beginPath();
+    slam.path.forEach(([x, y], i) => i ? g.lineTo(X(x), Y(y)) : g.moveTo(X(x), Y(y))); g.stroke(); g.lineWidth = 1;
+  }
+  slam.stations.forEach((st, i) => {
+    g.fillStyle = '#f59e0b'; g.beginPath(); g.arc(X(st.x), Y(st.y), 5, 0, 7); g.fill();
+    g.fillStyle = '#92400e'; g.font = '11px sans-serif'; g.textAlign = 'left'; g.fillText(i + 1, X(st.x) + 7, Y(st.y) - 6);
+  });
+  slam.boxes.forEach((b, i) => {
+    g.strokeStyle = '#ea580c'; g.lineWidth = 2; if (b.s < 20) g.setLineDash([5, 4]);
+    g.strokeRect(X(b.x - 50), Y(b.y + 50), 100 * s, 100 * s); g.lineWidth = 1; g.setLineDash([]);
+    g.fillStyle = '#ea580c'; g.font = 'bold 11px sans-serif'; g.textAlign = 'center'; g.fillText('B' + (i + 1), X(b.x), Y(b.y) + 4);
+  });
+  if (!opts.noCar) {
+    const p = slam.pose, a = -p.th * Math.PI / 180;
+    if (slam.active) drawRays(g, X(p.x), Y(p.y), a, s, s, tof.mm, +cfg.slam.maxr);
+    drawCar(g, X(p.x), Y(p.y), a, s, slam.scanning ? '#f59e0b' : '#2563eb');
+  }
+  // thước tỉ lệ
+  const bar = step * (step * s < 60 ? 2 : 1);
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(8, h - 30, bar * s + 70, 22);
+  g.strokeStyle = '#0f172a'; g.lineWidth = 2; g.beginPath(); g.moveTo(14, h - 14); g.lineTo(14 + bar * s, h - 14); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = '#0f172a'; g.font = '11px sans-serif'; g.textAlign = 'left'; g.fillText(bar >= 1000 ? bar / 1000 + ' m' : bar + ' mm', 20 + bar * s, h - 10);
+}
+function drawMap() {
+  const f = fit($('cvMap')); if (!f) return; const [g, w, h] = f;
+  if ($('mapFollow').checked && slam.active) { slam.view.cx = slam.pose.x; slam.view.cy = slam.pose.y; }
+  paintMap(g, w, h, slam.view);
+  if (!slam.grid) { g.fillStyle = '#475569'; g.font = '14px sans-serif'; g.textAlign = 'center'; g.fillText('Bấm "Bắt đầu map mới" để quét', w / 2, h / 2); }
+}
+function mapBounds() { // vùng đã biết (ô khác "chưa biết") + đường đi
+  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+  const { W, H, grid, res } = slam;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (Math.abs(grid[y * W + x]) >= 0.15) {
+    x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+  }
+  let b = x1 < 0 ? null : { x0: slam.ox + x0 * res, x1: slam.ox + (x1 + 1) * res, y0: slam.oy + y0 * res, y1: slam.oy + (y1 + 1) * res };
+  for (const [x, y] of slam.path) b = b ? { x0: Math.min(b.x0, x), x1: Math.max(b.x1, x), y0: Math.min(b.y0, y), y1: Math.max(b.y1, y) } : { x0: x, x1: x, y0: y, y1: y };
+  return b && { x0: b.x0 - 100, x1: b.x1 + 100, y0: b.y0 - 100, y1: b.y1 + 100 };
+}
+$('btnMapFit').onclick = () => {
+  const c = $('cvMap'), b = slam.grid && mapBounds(); if (!b) return;
+  $('mapFollow').checked = false;
+  slam.view = { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, s: Math.min(c.clientWidth / (b.x1 - b.x0), +c.dataset.h / (b.y1 - b.y0)) };
+};
+const mapZoom = (k, px, py) => {
+  const c = $('cvMap'), w = c.clientWidth, h = +c.dataset.h || 640, v = slam.view;
+  px ??= w / 2; py ??= h / 2;
+  const wx = v.cx + (px - w / 2) / v.s, wy = v.cy - (py - h / 2) / v.s;
+  v.s = Math.max(0.03, Math.min(4, v.s * k));
+  v.cx = wx - (px - w / 2) / v.s; v.cy = wy + (py - h / 2) / v.s;
+};
+$('btnMapZin').onclick = () => mapZoom(1.4);
+$('btnMapZout').onclick = () => mapZoom(1 / 1.4);
+$('cvMap').addEventListener('wheel', e => { e.preventDefault(); const r = e.target.getBoundingClientRect(); mapZoom(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+{
+  let drag = null;
+  $('cvMap').addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, cx: slam.view.cx, cy: slam.view.cy }; e.target.setPointerCapture(e.pointerId); });
+  $('cvMap').addEventListener('pointermove', e => {
+    if (!drag) return;
+    if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 3) $('mapFollow').checked = false;
+    slam.view.cx = drag.cx - (e.clientX - drag.x) / slam.view.s; slam.view.cy = drag.cy + (e.clientY - drag.y) / slam.view.s;
+  });
+  ['pointerup', 'pointercancel'].forEach(ev => $('cvMap').addEventListener(ev, () => { drag = null; }));
+}
+
+/* ---------- xuất ---------- */
+function download(name, blob) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+const stampName = () => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+$('btnMapPng').onclick = () => {
+  const b = mapBounds(); if (!b) return;
+  const s = 0.5, w = Math.round((b.x1 - b.x0) * s), h = Math.round((b.y1 - b.y0) * s); // 2 mm / điểm ảnh
+  const c = document.createElement('canvas'); c.width = w; c.height = h + 34;
+  const g = c.getContext('2d');
+  paintMap(g, w, h, { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, s }, { noCar: true });
+  g.fillStyle = '#fff'; g.fillRect(0, h, w, 34); g.fillStyle = '#0f172a'; g.font = '13px sans-serif'; g.textAlign = 'left';
+  g.fillText(`Micromouse · ô ${slam.res} mm · 1 điểm ảnh = 2 mm · ${slam.stations.length} lần quét · gốc (0,0): trục đỏ = x, xanh = y · ${new Date().toLocaleString('vi')}`, 8, h + 22);
+  c.toBlob(bl => download(`ban_do_${stampName()}.png`, bl));
+};
+$('btnMapJson').onclick = () => {
+  const { W, H, grid } = slam, u8 = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) u8[i] = Math.abs(grid[i]) < 0.15 ? 255 : Math.round(254 / (1 + Math.exp(-grid[i])));
+  let bin = ''; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  const data = {
+    version: 1, created: new Date().toISOString(), resolution_mm: slam.res, origin_mm: [slam.ox, slam.oy], width: W, height: H,
+    encoding: 'uint8 hàng theo y tăng dần: 0..254 = xác suất có vật cản × 254, 255 = chưa biết; base64',
+    occupancy: btoa(bin),
+    start_pose: { x: +cfg.slam.x0, y: +cfg.slam.y0, th_deg: +cfg.slam.th0 },
+    final_pose: { x: +slam.pose.x.toFixed(1), y: +slam.pose.y.toFixed(1), th_deg: +wrap180(slam.pose.th).toFixed(2) },
+    stations: slam.stations.map(s => ({ x: +s.x.toFixed(1), y: +s.y.toFixed(1), samples: s.n, correction: s.corr })),
+    path: slam.path.map(([x, y]) => [+x.toFixed(1), +y.toFixed(1)]),
+    static_boxes: slam.boxes.map((b, i) => ({ id: i + 1, x: Math.round(b.x), y: Math.round(b.y), conf: Math.round(b.s) })),
+    tof_mount: TOF_MOUNT, tof_fov_deg: +cfg.slam.fov,
+  };
+  download(`ban_do_${stampName()}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+};
+$('btnMapBoxes').onclick = detectBoxes;
+$('btnMapStart').onclick = mapStart;
+$('btnMapStop').onclick = () => mapStop();
+$('btnMapScan').onclick = mapScan;
+$$('.mapstep').forEach(b => b.onclick = () => mapStep(b.dataset.step));
+$('mapPreset0').onclick = e => { e.preventDefault(); setCfg('slam.x0', 0); setCfg('slam.y0', 0); setCfg('slam.th0', 90); };
+$('mapPresetField').onclick = e => { e.preventDefault(); setCfg('slam.x0', 200); setCfg('slam.y0', -95); setCfg('slam.th0', 90); };
+
+/* ============================================================================================
+ * ⑨ Thông số & sao lưu
  * ============================================================================================ */
 function updDerived() {
   const d = cfg.circ / Math.PI;
   $('mechDerived').textContent = `→ ${mmpc().toFixed(4)} mm/xung · đường kính bánh ${d.toFixed(2)} mm · quay tại chỗ ${cpd().toFixed(2)} xung/độ`;
   $('mmpcTxt').textContent = `(${mmpc().toFixed(3)} mm/xung)`;
   $('trackTxt').textContent = `Khoảng cách 2 bánh đang dùng: ${cfg.track} mm → ${cpd().toFixed(2)} xung/độ`;
-  $('pwmTxt').textContent = cfg.drive.pwm + '%';
+  $('pwmTxt').textContent = cfg.drive.pwm + '%'; $('mapPwmTxt').textContent = cfg.drive.pwm + '%';
   updCprTheory(); showFf(); showScale(); updVelTxt();
   if (page === 'settings') drawSettings();
 }
@@ -1751,6 +2407,7 @@ function frame() {
     case 'pid': drawVelCharts(); break;
     case 'straight': drawSim(); drawRunCharts(); break;
     case 'rotate': drawRot(); drawRotCharts(); break;
+    case 'map': drawMap(); break;
   }
   requestAnimationFrame(frame);
 }
@@ -1759,6 +2416,7 @@ function frame() {
  * Khởi chạy
  * ============================================================================================ */
 $('btnConn').onclick = connect;
+$('btnBle').onclick = connectBle;
 bindInputs();
 drawI2c(); drawCalTable(); drawRunHist(); drawRotHist(); drawIdent(); updEnc(); updMpuChips();
 $('identOut').innerHTML = '';
