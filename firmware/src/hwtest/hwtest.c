@@ -14,12 +14,13 @@
 #include "timebase.h"
 #include "tof.h"
 
-#define TELEMETRY_MS   40   /* 25 Hz */
+#define TELEMETRY_MS   40   /* 25 Hz mặc định; web giảm xuống khi dùng BLE (lệnh "tel") */
 #define MANUAL_WDOG_MS 500  /* lái tay: không nhận lệnh "m" quá lâu (rớt Bluetooth) -> dừng */
 #define GO_TIMEOUT_MS  8000 /* chạy hở: encoder không đếm (đứt dây) thì vẫn dừng */
 #define STILL_ENC_MS   300  /* encoder đứng yên bấy lâu mới cho MPU tự bù trôi */
 
-int tel_tof, tel_imu;
+int tel_tof, tel_imu, tel_map;
+uint32_t tel_ms = TELEMETRY_MS;
 
 static uint32_t manual_tick, enc_move_tick;
 static struct {
@@ -122,6 +123,11 @@ static void telemetry(uint32_t dt_ms)
   prev[SIDE_R] = c[SIDE_R];
   link_printf("ENC,%ld,%ld,%.0f,%.0f\n", (long)c[SIDE_L], (long)c[SIDE_R], spd[SIDE_L], spd[SIDE_R]);
 
+  if (tel_map) { /* quét bản đồ: encoder + yaw + 5 ToF trong cùng một dòng, cùng một thời điểm */
+    link_printf("MAP,%lu,%ld,%ld,%.2f,%d,%d,%d,%d,%d\n", (unsigned long)HAL_GetTick(), (long)c[SIDE_L],
+                (long)c[SIDE_R], imu_ok() ? imu_att()->yaw : 0.0f, tof_mm(TOF_L90), tof_mm(TOF_L45),
+                tof_mm(TOF_M0), tof_mm(TOF_R45), tof_mm(TOF_R90));
+  }
   if (tel_tof)
     link_printf("TOF,%d,%d,%d,%d,%d\n", tof_mm(TOF_L90), tof_mm(TOF_L45), tof_mm(TOF_M0), tof_mm(TOF_R45),
                 tof_mm(TOF_R90));
@@ -202,7 +208,7 @@ void hwtest_run(void)
     if (link_read_line(line, sizeof line)) commands_dispatch(line);
 
     uint32_t now = HAL_GetTick();
-    if (now - last_tel >= TELEMETRY_MS) {
+    if (now - last_tel >= tel_ms) {
       telemetry(now - last_tel);
       last_tel = now;
     }
